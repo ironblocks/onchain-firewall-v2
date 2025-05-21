@@ -3,6 +3,8 @@
 // Copyright (c) Ironblocks 2025
 pragma solidity ^0.8.25;
 
+import {IFeePool} from "./IFeePool.sol";
+
 import {IAttestationCenter} from "../../dependencies/othentic/interfaces/IAttestationCenter.sol";
 
 /**
@@ -65,13 +67,13 @@ interface IAttestationCenterProxy {
      * @dev Get the fee pool address.
      * @return The address of the fee pool.
      */
-    function feePool() external view returns (address);
+    function feePool() external view returns (IFeePool);
 
     /**
      * @dev Get the attestation center address.
      * @return The address of the attestation center.
      */
-    function attestationCenter() external view returns (address);
+    function attestationCenter() external view returns (IAttestationCenter);
 
     /**
      * @dev Get the version of the attestation center proxy.

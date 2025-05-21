@@ -26,6 +26,7 @@ interface IFeeCalculator {
         uint256 aggregatorId;
         uint256 performerId;
         uint256[] attestersIds;
+        bool isApproved;
     }
 
     struct FeePerId {

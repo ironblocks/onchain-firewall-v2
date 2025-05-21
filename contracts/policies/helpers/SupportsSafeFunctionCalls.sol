@@ -7,7 +7,7 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 import {IApprovedCallsPolicy} from "../../interfaces/policies/IApprovedCallsPolicy.sol";
 
-contract SupportsSafeFunctionCalls is IERC165 {
+abstract contract SupportsSafeFunctionCalls is IERC165 {
     /**
      * @dev See {IERC165-supportsInterface}.
      */

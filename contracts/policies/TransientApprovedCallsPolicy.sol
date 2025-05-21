@@ -77,13 +77,12 @@ contract TransientApprovedCallsPolicy is
         address _txOrigin,
         uint256 _nonce
     ) external onlyRole(SIGNER_ROLE) {
-        _validateApprovedCalls(_expiration, _txOrigin, _nonce);
-        require(tx.origin == _txOrigin, "TransientApprovedCallsPolicy: Invalid txOrigin.");
+        _validateApprovedCalls(_callHashes, _expiration, _txOrigin, _nonce);
 
-        _storeBytes32ArrayAtSlot(bytes32(0), _callHashes);
+        _storeBytes32ArrayAtSlot(_callHashes);
         nonces[_txOrigin] = _nonce + 1;
 
-        emit CallsApproved(_callHashes, _expiration, _txOrigin);
+        emit CallsApproved(_callHashes, _expiration, _txOrigin, _nonce);
     }
 
     function approveCallsViaSignature(
@@ -93,41 +92,40 @@ contract TransientApprovedCallsPolicy is
         uint256 _nonce,
         bytes calldata _signature
     ) external {
-        _validateApprovedCalls(_expiration, _txOrigin, _nonce);
+        _validateApprovedCalls(_callHashes, _expiration, _txOrigin, _nonce);
         _validateSignature(_callHashes, _expiration, _txOrigin, _nonce, _signature);
 
-        _storeBytes32ArrayAtSlot(bytes32(0), _callHashes);
+        _storeBytes32ArrayAtSlot(_callHashes);
         nonces[_txOrigin] = _nonce + 1;
 
         emit CallsApprovedViaSignature(_callHashes, _expiration, _txOrigin, _nonce, _signature);
     }
 
-    function setExecutorStatus(
-        address _caller,
-        bool _status
-    ) external onlyRole(POLICY_ADMIN_ROLE) {
+    function setExecutorStatus(address _caller, bool _status) external onlyRole(ADMIN_ROLE) {
         _setExecutorStatus(_caller, _status);
     }
 
     function setConsumersStatuses(
         address[] calldata _consumers,
         bool[] calldata _statuses
-    ) external onlyRole(POLICY_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         _setConsumersStatuses(_consumers, _statuses);
     }
 
     function _getCallHashesLength() internal view returns (uint256) {
-        uint256 length = uint256(bytes32(0).getValueBySlot());
-        return length;
+        return uint256(bytes32(0).getValueBySlot());
     }
 
     function _validateApprovedCalls(
+        bytes32[] calldata _callHashes,
         uint256 _expiration,
         address _txOrigin,
         uint256 _nonce
     ) internal view {
+        require(_callHashes.length > 0, "TransientApprovedCallsPolicy: Calls empty.");
         require(_nonce == nonces[_txOrigin], "TransientApprovedCallsPolicy: Invalid nonce.");
         require(_expiration > block.timestamp, "TransientApprovedCallsPolicy: Expired.");
+        require(tx.origin == _txOrigin, "TransientApprovedCallsPolicy: Invalid txOrigin.");
     }
 
     function _validateSignature(
@@ -155,23 +153,31 @@ contract TransientApprovedCallsPolicy is
         bytes32(0).setValueBySlot(bytes32(callHashesLength - 1));
     }
 
-    function _storeBytes32ArrayAtSlot(bytes32 _slot, bytes32[] memory _bytes32Array) internal {
-        _slot.setValueBySlot(bytes32(_bytes32Array.length));
+    function _storeBytes32ArrayAtSlot(bytes32[] memory _bytes32Array) internal {
+        bytes32(0).setValueBySlot(bytes32(_bytes32Array.length));
 
         for (uint256 i = 0; i < _bytes32Array.length; i++) {
-            bytes32(uint256(_slot) + i + 1).setValueBySlot(_bytes32Array[i]);
+            bytes32(i + 1).setValueBySlot(_bytes32Array[i]);
         }
     }
 
-    function _getBytes32ArrayAtSlot(bytes32 _slot) internal view returns (bytes32[] memory) {
-        uint256 length = uint256(_slot.getValueBySlot());
+    function getCurrentApprovedCalls() external view returns (bytes32[] memory approvedCalls) {
+        uint256 length = uint256(bytes32(0).getValueBySlot());
 
-        bytes32[] memory _bytes32Array = new bytes32[](length);
+        approvedCalls = new bytes32[](length);
         for (uint256 i = 0; i < length; i++) {
-            _bytes32Array[i] = bytes32(uint256(_slot) + i + 1).getValueBySlot();
+            approvedCalls[i] = bytes32(i + 1).getValueBySlot();
         }
+    }
 
-        return _bytes32Array;
+    function getCallHash(
+        address _consumer,
+        address _sender,
+        address _origin,
+        bytes memory _data,
+        uint256 _value
+    ) external pure returns (bytes32) {
+        return ApprovedCallsHelper.getCallHash(_consumer, _sender, _origin, _data, _value);
     }
 
     /**

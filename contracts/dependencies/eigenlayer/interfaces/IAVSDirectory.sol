@@ -70,6 +70,14 @@ interface IAVSDirectory is ISignatureUtils {
     function OPERATOR_AVS_REGISTRATION_TYPEHASH() external view returns (bytes32);
 
     /**
+     * @notice Returns the status of an operator's registration with an AVS
+     * @param operator The address of the operator to check
+     * @param avs The address of the AVS to check
+     * @return The status of the operator's registration with the AVS
+     */
+    function avsOperatorStatus(address operator, address avs) external view returns (uint8);
+
+    /**
      * @notice Called by an operator to cancel a salt that has been used to register with an AVS.
      * @param salt A unique and single use value associated with the approver signature.
      */

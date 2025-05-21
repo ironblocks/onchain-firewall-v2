@@ -196,6 +196,11 @@ contract Firewall is IFirewall, Ownable2StepUpgradeable, UUPSUpgradeable {
         bytes4[] calldata _methodSigs,
         address[] calldata _policies
     ) external onlyConsumerAdmin(_consumer) {
+        require(
+            _methodSigs.length == _policies.length,
+            "Firewall: Method sigs and policies length mismatch."
+        );
+
         for (uint256 i = 0; i < _policies.length; i++) {
             _addPolicy(_consumer, _methodSigs[i], _policies[i]);
         }
@@ -214,6 +219,11 @@ contract Firewall is IFirewall, Ownable2StepUpgradeable, UUPSUpgradeable {
         bytes4[] calldata _methodSigs,
         address[] calldata _policies
     ) external onlyConsumerAdmin(_consumer) {
+        require(
+            _methodSigs.length == _policies.length,
+            "Firewall: Method sigs and policies length mismatch."
+        );
+
         for (uint256 i = 0; i < _policies.length; i++) {
             _removePolicy(_consumer, _methodSigs[i], _policies[i]);
         }

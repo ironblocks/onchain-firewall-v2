@@ -30,4 +30,44 @@ library Transient {
             tstore(_slot, _value)
         }
     }
+
+    /**
+     * @dev Sets the value at the given slot.
+     * @param _slot The slot to write to.
+     * @param _value The value to write.
+     */
+    function setValueBySlot(bytes32 _slot, uint256 _value) internal {
+        /// @solidity memory-safe-assembly
+        assembly {
+            tstore(_slot, _value)
+        }
+    }
+
+    function setAddressBySlot(bytes32 _slot, address _address) internal {
+        /// @solidity memory-safe-assembly
+        assembly {
+            tstore(_slot, _address)
+        }
+    }
+
+    function getAddressBySlot(bytes32 _slot) internal view returns (address _address) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            _address := tload(_slot)
+        }
+    }
+
+    function getUint256BySlot(bytes32 _slot) internal view returns (uint256 _value) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            _value := tload(_slot)
+        }
+    }
+
+    function setUint256BySlot(bytes32 _slot, uint256 _value) internal {
+        /// @solidity memory-safe-assembly
+        assembly {
+            tstore(_slot, _value)
+        }
+    }
 }

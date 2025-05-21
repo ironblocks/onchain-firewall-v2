@@ -3,6 +3,7 @@
 // Copyright (c) Ironblocks 2025
 pragma solidity ^0.8.25;
 
+import {IAttestationCenter} from "../dependencies/othentic/interfaces/IAttestationCenter.sol";
 /**
  * @title IProtocolRegistry
  * @dev Interface for the Protocol Registry contract.
@@ -11,14 +12,10 @@ interface IProtocolRegistry {
     /**
      * @dev Struct for storing protocol information.
      * @param policyAddress The address of the policy contract.
-     * @param requiredOperatorIds The IDs of the operators required for the protocol.
-     * @param taskDefinitionId The ID of the task definition for the protocol.
      * @param metadataURI The metadata URI for the protocol.
      */
     struct Protocol {
         address policyAddress;
-        uint256[] requiredOperatorIds;
-        uint16 taskDefinitionId;
         string metadataURI;
     }
 
@@ -45,37 +42,35 @@ interface IProtocolRegistry {
     /**
      * @dev Event emitted when a protocol is updated.
      * @param policyAddress The address of the policy contract.
-     * @param requiredOperatorIds The IDs of the operators required for the protocol.
-     * @param taskDefinitionId The ID of the task definition for the protocol.
      * @param metadataURI The metadata URI for the protocol.
      */
-    event ProtocolUpdated(
-        address indexed policyAddress,
-        uint256[] requiredOperatorIds,
-        uint16 taskDefinitionId,
-        string metadataURI
-    );
-
-    /**
-     * @dev Event emitted when a task definition fee is set.
-     * @param taskDefinitionId The ID of the task definition.
-     * @param fee The fee for the task definition.
-     */
-    event TaskDefinitionFeeSet(uint16 indexed taskDefinitionId, uint256 fee);
+    event ProtocolUpdated(address indexed policyAddress, string metadataURI);
 
     /**
      * @dev Event emitted when a protocol is registered.
      * @param policyAddress The address of the policy contract.
-     * @param requiredOperatorIds The IDs of the operators required for the protocol.
-     * @param taskDefinitionId The ID of the task definition for the protocol.
      * @param metadataURI The metadata URI for the protocol.
      */
-    event ProtocolRegistered(
+    event ProtocolRegistered(address indexed policyAddress, string metadataURI);
+
+    /**
+     * @dev Event emitted when a protocol subscribes a subnet.
+     * @param policyAddress The address of the policy contract.
+     * @param taskDefinitionId The ID of the task definition for the protocol.
+     * @param requiredOperatorIds The IDs of the operators required for the protocol.
+     */
+    event SubnetSubscribed(
         address indexed policyAddress,
-        uint256[] requiredOperatorIds,
         uint16 taskDefinitionId,
-        string metadataURI
+        uint256[] requiredOperatorIds
     );
+
+    /**
+     * @dev Event emitted when a protocol unsubscribes a subnet.
+     * @param policyAddress The address of the policy contract.
+     * @param taskDefinitionId The ID of the task definition for the protocol.
+     */
+    event SubnetUnsubscribed(address indexed policyAddress, uint16 taskDefinitionId);
 
     /**
      * @dev Event emitted when a protocol detection is approved.
@@ -124,22 +119,10 @@ interface IProtocolRegistry {
     event VennDetectionFeeSet(uint256 fee);
 
     /**
-     * @dev Event emitted when a fee pool is set.
-     * @param feePool The address of the fee pool.
-     */
-    event FeePoolSet(address indexed feePool);
-
-    /**
      * @dev Event emitted when an attestation center is set.
      * @param attestationCenter The address of the attestation center.
      */
     event AttestationCenterSet(address indexed attestationCenter);
-
-    /**
-     * @dev Event emitted when a task definition max fee is set.
-     * @param fee The maximum fee for a task definition.
-     */
-    event TaskDefinitionMaxFeeSet(uint256 fee);
 
     /**
      * @dev Event emitted when a venn protocol fee is set.
@@ -151,16 +134,12 @@ interface IProtocolRegistry {
      * @dev Initialize the protocol registry.
      * @param _attestationCenter The address of the attestation center.
      * @param _vennFeeRecipient The address of the venn fee recipient.
-     * @param _feePool The address of the fee pool.
-     * @param _taskDefinitionMaxFee The maximum fee for a task definition.
      * @param _vennDetectionFee The fee for a venn detection.
      * @param _vennProtocolFee The fee for a venn protocol.
      */
     function __ProtocolRegistry_init(
         address _attestationCenter,
         address _vennFeeRecipient,
-        address _feePool,
-        uint256 _taskDefinitionMaxFee,
         uint256 _vennDetectionFee,
         uint256 _vennProtocolFee
     ) external;
@@ -171,13 +150,14 @@ interface IProtocolRegistry {
      * @param _assets The addresses of the assets.
      * @param _admins The addresses of the admins.
      * @param _metadataURI The metadata URI for the protocol detection.
+     * @return detectionEscrow The address of the detection escrow.
      */
     function createAndRegisterProtocolDetection(
         address _operator,
         address[] calldata _assets,
         address[] calldata _admins,
         string calldata _metadataURI
-    ) external;
+    ) external returns (address detectionEscrow);
 
     /**
      * @dev Approve a protocol detection as an operator.
@@ -186,57 +166,43 @@ interface IProtocolRegistry {
     function approveProtocolDetectionAsOperator(address _detectionEscrow) external;
 
     /**
-     * @dev Set the fee for a task definition.
-     * @param _taskDefinitionId The ID of the task definition.
-     * @param _fee The fee for the task definition.
-     */
-    function setTaskDefinitionFee(uint16 _taskDefinitionId, uint256 _fee) external;
-
-    /**
      * @dev Register a protocol.
      * @param _policyAddress The address of the policy contract.
-     * @param _requiredOperatorIds The IDs of the operators required for the protocol.
-     * @param _taskDefinitionId The ID of the task definition for the protocol.
      * @param _metadataURI The metadata URI for the protocol.
      */
-    function registerProtocol(
-        address _policyAddress,
-        uint256[] calldata _requiredOperatorIds,
-        uint16 _taskDefinitionId,
-        string calldata _metadataURI
-    ) external;
+    function registerProtocol(address _policyAddress, string calldata _metadataURI) external;
 
     /**
      * @dev Update a protocol.
      * @param _policyAddress The address of the policy contract.
-     * @param _requiredOperatorIds The IDs of the operators required for the protocol.
-     * @param _taskDefinitionId The ID of the task definition for the protocol.
      * @param _metadataURI The metadata URI for the protocol.
      */
-    function updateProtocol(
+    function updateProtocol(address _policyAddress, string calldata _metadataURI) external;
+
+    /**
+     * @dev Subscribe a subnet to a protocol.
+     * @param _policyAddress The address of the policy contract.
+     * @param _taskDefinitionId The ID of the task definition for the protocol.
+     * @param _requiredOperatorIds The IDs of the operators required for the protocol.
+     */
+    function subscribeSubnet(
         address _policyAddress,
-        uint256[] calldata _requiredOperatorIds,
         uint16 _taskDefinitionId,
-        string calldata _metadataURI
+        uint256[] calldata _requiredOperatorIds
     ) external;
 
     /**
-     * @dev Set the fee pool.
-     * @param _feePool The address of the fee pool.
+     * @dev Unsubscribe a subnet from a protocol.
+     * @param _policyAddress The address of the policy contract.
+     * @param _taskDefinitionId The ID of the task definition for the protocol.
      */
-    function setFeePool(address _feePool) external;
+    function unsubscribeSubnet(address _policyAddress, uint16 _taskDefinitionId) external;
 
     /**
      * @dev Set the attestation center.
      * @param _attestationCenter The address of the attestation center.
      */
     function setAttestationCenter(address _attestationCenter) external;
-
-    /**
-     * @dev Set the task definition max fee.
-     * @param _taskDefinitionMaxFee The maximum fee for a task definition.
-     */
-    function setTaskDefinitionMaxFee(uint256 _taskDefinitionMaxFee) external;
 
     /**
      * @dev Set the venn detection fee.
@@ -257,26 +223,34 @@ interface IProtocolRegistry {
     function setVennFeeRecipient(address _vennFeeRecipient) external;
 
     /**
-     * @dev Get the task definition ID for a protocol.
+     * @dev Get the task definition IDs for a protocol.
      * @param _policyAddress The address of the policy contract.
-     * @return The ID of the task definition for the protocol.
+     * @return The IDs of the task definitions for the protocol.
      */
-    function getProtocolTaskDefinitionId(address _policyAddress) external view returns (uint16);
+    function getProtocolTaskDefinitionIds(
+        address _policyAddress
+    ) external view returns (uint256[] memory);
 
     /**
-     * @dev Get the fee for a protocol.
+     * @dev Check if a protocol is subscribed to a task definition.
      * @param _policyAddress The address of the policy contract.
-     * @return The fee for the protocol.
+     * @param _taskDefinitionId The ID of the task definition for the protocol.
+     * @return Whether the protocol is subscribed to the task definition.
      */
-    function getProtocolFee(address _policyAddress) external view returns (uint256);
+    function isSubnetSubscribed(
+        address _policyAddress,
+        uint16 _taskDefinitionId
+    ) external view returns (bool);
 
     /**
      * @dev Get the required operator IDs for a protocol.
      * @param _policyAddress The address of the policy contract.
+     * @param _taskDefinitionId The ID of the task definition for the protocol.
      * @return The IDs of the operators required for the protocol.
      */
     function getRequiredOperatorIds(
-        address _policyAddress
+        address _policyAddress,
+        uint16 _taskDefinitionId
     ) external view returns (uint256[] memory);
 
     /**
@@ -292,12 +266,6 @@ interface IProtocolRegistry {
     function ADMIN_ROLE() external view returns (bytes32);
 
     /**
-     * @dev Get the policy admin role.
-     * @return The policy admin role.
-     */
-    function POLICY_ADMIN_ROLE() external view returns (bytes32);
-
-    /**
      * @dev Get the maximum venn detection fee.
      * @return The maximum venn detection fee.
      */
@@ -310,11 +278,6 @@ interface IProtocolRegistry {
     function MAX_VENN_PROTOCOL_FEE() external view returns (uint256);
 
     /**
-     * @dev Get the fee for a task definition.
-     * @param _taskDefinitionId The ID of the task definition.
-     * @return The fee for the task definition.
-     */
-    function taskDefinitionIdFees(uint16 _taskDefinitionId) external view returns (uint256);
 
     /**
      * @dev Get the venn fee recipient.
@@ -326,19 +289,7 @@ interface IProtocolRegistry {
      * @dev Get the attestation center.
      * @return The address of the attestation center.
      */
-    function attestationCenter() external view returns (address);
-
-    /**
-     * @dev Get the fee pool.
-     * @return The address of the fee pool.
-     */
-    function feePool() external view returns (address);
-
-    /**
-     * @dev Get the task definition max fee.
-     * @return The maximum fee for a task definition.
-     */
-    function taskDefinitionMaxFee() external view returns (uint256);
+    function attestationCenter() external view returns (IAttestationCenter);
 
     /**
      * @dev Get the venn detection fee. Base 1_000_000.
@@ -357,14 +308,14 @@ interface IProtocolRegistry {
      * @param _policyAddress The address of the policy contract.
      * @return The protocol struct for the policy address.
      */
-    function getProtocols(address _policyAddress) external view returns (Protocol memory);
+    function getProtocol(address _policyAddress) external view returns (Protocol memory);
 
     /**
      * @dev Get the protocol detection struct for a detection escrow.
      * @param _detectionEscrow The address of the detection escrow.
      * @return The protocol detection struct for the detection escrow.
      */
-    function getProtocolDetections(
+    function getProtocolDetection(
         address _detectionEscrow
     ) external view returns (ProtocolDetection memory);
 }

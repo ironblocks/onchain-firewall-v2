@@ -10,6 +10,16 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
  * @notice Terms of Service: https://www.othentic.xyz/terms-of-service
  */
 interface IAvsGovernance is IAccessControl {
+    enum SharedSecurityProvider {
+        EigenLayer,
+        Symbiotic
+    }
+
+    struct StakingContractInfo {
+        address stakingContract;
+        SharedSecurityProvider sharedSecurityProvider;
+    }
+
     struct StrategyMultiplier {
         address strategy;
         uint256 multiplier;
@@ -199,4 +209,13 @@ interface IAvsGovernance is IAccessControl {
     function avsDirectory() external view returns (address);
 
     function setSupportedStrategies(address[] calldata _strategies) external;
+
+    function setSupportedStakingContracts(
+        StakingContractInfo[] memory _stakingContractsDetails
+    ) external;
+
+    function registerOperatorToEigenLayer(
+        ISignatureUtils.SignatureWithSaltAndExpiry memory _eigenSig,
+        bytes calldata _authToken
+    ) external;
 }

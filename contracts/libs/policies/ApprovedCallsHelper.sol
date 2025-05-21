@@ -45,7 +45,7 @@ library ApprovedCallsHelper {
      */
     function recoverSigner(
         bytes32 _ethSignedMessageHash,
-        bytes memory _signature
+        bytes calldata _signature
     ) internal pure returns (address) {
         (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
 

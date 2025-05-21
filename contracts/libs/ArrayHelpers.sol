@@ -9,11 +9,11 @@ pragma solidity ^0.8.25;
  */
 library ArrayHelpers {
     /**
-     * @dev Verifies if an array is sorted in ascending order.
+     * @dev Verifies if an array is sorted in ascending order and contains unique elements.
      * @param _arr The array to check for sorted order.
-     * @return True if the array is sorted, false otherwise.
+     * @return True if the array is sorted and contains unique elements, false otherwise.
      */
-    function isSorted(uint256[] memory _arr) internal pure returns (bool) {
+    function isSortedAndUnique(uint256[] memory _arr) internal pure returns (bool) {
         uint256 len = _arr.length;
 
         if (len <= 1) return true;

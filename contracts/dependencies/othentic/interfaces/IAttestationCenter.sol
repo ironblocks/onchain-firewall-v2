@@ -73,7 +73,6 @@ interface IAttestationCenter is IAccessControl {
         uint16 taskDefinitionId
     );
     event SetAvsLogic(address avsLogic);
-    event SetBeforePaymentsLogic(address paymentsLogic);
     event SetAvsGovernanceMultisig(address newAvsGovernanceMultisig);
     event SetMessageHandler(address newMessageHandler);
     event RewardAccumulated(
@@ -116,6 +115,8 @@ interface IAttestationCenter is IAccessControl {
 
     function numOfOperators() external view returns (uint256);
 
+    function numOfTotalOperators() external view returns (uint256);
+
     function votingPower(address _operator) external view returns (uint256);
 
     function getOperatorPaymentDetail(
@@ -126,11 +127,19 @@ interface IAttestationCenter is IAccessControl {
         uint16 _taskDefinitionId
     ) external view returns (uint256);
 
+    function getTaskDefinitionMaximumNumberOfAttesters(
+        uint16 _taskDefinitionId
+    ) external view returns (uint256);
+
     function getTaskDefinitionRestrictedOperators(
         uint16 _taskDefinitionId
     ) external view returns (uint256[] memory);
 
     function numOfTaskDefinitions() external view returns (uint16);
+
+    function getTaskDefinitionRestrictedAttesters(
+        uint16 _taskDefinitionId
+    ) external view returns (uint256[] memory);
 
     function operatorsIdsByAddress(address _operator) external view returns (uint256);
 
@@ -194,12 +203,15 @@ interface IAttestationCenter is IAccessControl {
         uint256 _minimumVotingPower
     ) external;
 
+    function setTaskDefinitionRestrictedAttesters(
+        uint16 _taskDefinitionId,
+        uint256[] calldata _restrictedAttesterIndexes
+    ) external;
+
     function setTaskDefinitionRestrictedOperators(
         uint16 _taskDefinitionId,
         uint256[] calldata _restrictedOperatorIndexes
     ) external;
-
-    function setBeforePaymentsLogic(IBeforePaymentsLogic _beforePaymentsLogic) external;
 
     function setIsOpenAggregator(bool _isOpenAggregator) external;
 
@@ -213,4 +225,6 @@ interface IAttestationCenter is IAccessControl {
     function isFlowPaused(bytes4 _pausableFlow) external view returns (bool _isPaused);
     function pause(bytes4 _pausableFlow) external;
     function unpause(bytes4 _pausableFlow) external;
+
+    function setOblsSharesSyncer(address _oblsSharesSyncer) external;
 }

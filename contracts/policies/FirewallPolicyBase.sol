@@ -6,8 +6,6 @@ pragma solidity ^0.8.25;
 import {IFirewallPolicyBase} from "../interfaces/policies/IFirewallPolicyBase.sol";
 
 abstract contract FirewallPolicyBase is IFirewallPolicyBase {
-    bytes32 public constant POLICY_ADMIN_ROLE = keccak256("POLICY_ADMIN_ROLE");
-
     mapping(address executor => bool authorized) public authorizedExecutors;
     mapping(address consumer => bool approved) public approvedConsumer;
 

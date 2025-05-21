@@ -3,7 +3,7 @@
 // Copyright (c) Ironblocks 2025
 pragma solidity ^0.8.25;
 
-import {VennFirewallConsumerBase} from "../VennFirewallConsumerBase.sol";
+import {VennFirewallConsumerBase, Storage} from "../VennFirewallConsumerBase.sol";
 
 /**
  * @title VennFirewallConsumer
@@ -15,9 +15,7 @@ import {VennFirewallConsumerBase} from "../VennFirewallConsumerBase.sol";
  */
 contract VennFirewallConsumer is VennFirewallConsumerBase {
     constructor(address _firewall, address _firewallAdmin) {
-        _setAddressBySlot(FIREWALL_STORAGE_SLOT, _firewall);
-        _setAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT, _firewallAdmin);
-        _setAddressBySlot(SAFE_FUNCTION_CALLER_SLOT, CALLER_NOT_SET);
-        _setValueBySlot(SAFE_FUNCTION_CALL_FLAG_SLOT, INACTIVE);
+        Storage.setAddressBySlot(FIREWALL_STORAGE_SLOT, _firewall);
+        Storage.setAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT, _firewallAdmin);
     }
 }

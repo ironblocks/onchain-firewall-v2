@@ -3,6 +3,8 @@
 // Copyright (c) Ironblocks 2025
 pragma solidity ^0.8.25;
 
+import {IProtocolRegistry} from "./IProtocolRegistry.sol";
+
 interface IDetectionEscrow {
     /**
      * @dev Emitted when funds are withdrawn.
@@ -64,7 +66,7 @@ interface IDetectionEscrow {
      * @dev Get the protocol registry address.
      * @return The protocol registry address.
      */
-    function protocolRegistry() external view returns (address);
+    function protocolRegistry() external view returns (IProtocolRegistry);
 
     /**
      * @dev Get the operator address.

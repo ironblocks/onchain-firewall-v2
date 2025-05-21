@@ -24,8 +24,8 @@ contract AttestationCenterProxy is
 {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
-    address public feePool;
-    address public attestationCenter;
+    IFeePool public feePool;
+    IAttestationCenter public attestationCenter;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -49,10 +49,10 @@ contract AttestationCenterProxy is
         if (msg.value > 0) {
             address policyAddress = _extractPolicyAddress(_taskInfo.data);
 
-            IFeePool(feePool).depositNativeForPolicy{value: msg.value}(policyAddress);
+            feePool.depositNativeForPolicy{value: msg.value}(policyAddress);
         }
 
-        IAttestationCenter(attestationCenter).submitTask(_taskInfo, _taskSubmissionDetails);
+        attestationCenter.submitTask(_taskInfo, _taskSubmissionDetails);
     }
 
     function submitTasks(
@@ -62,26 +62,24 @@ contract AttestationCenterProxy is
         for (uint256 i = 0; i < _taskInfo.length; i++) {
             address policyAddress = _extractPolicyAddress(_taskInfo[i].data);
 
-            uint256 requiredAmount = IFeePool(feePool).getRequiredNativeAmountForPolicy(
-                policyAddress
+            uint256 requiredAmount = feePool.getRequiredNativeAmountForPolicy(
+                policyAddress,
+                _taskInfo[i].taskDefinitionId
             );
             if (requiredAmount > 0) {
                 require(
                     address(this).balance >= requiredAmount,
                     "AttestationCenterProxy: Insufficient balance for fees."
                 );
-                IFeePool(feePool).depositNativeForPolicy{value: requiredAmount}(policyAddress);
+                feePool.depositNativeForPolicy{value: requiredAmount}(policyAddress);
             }
 
-            IAttestationCenter(attestationCenter).submitTask(
-                _taskInfo[i],
-                _taskSubmissionDetails[i]
-            );
+            attestationCenter.submitTask(_taskInfo[i], _taskSubmissionDetails[i]);
         }
 
         if (address(this).balance > 0) {
             // We don't necessarily know who it belongs to, so we deposit it into the fee pool
-            IFeePool(feePool).depositRescuedFees{value: address(this).balance}();
+            feePool.depositRescuedFees{value: address(this).balance}();
         }
     }
 
@@ -94,13 +92,13 @@ contract AttestationCenterProxy is
     }
 
     function _setAttestationCenter(address _attestationCenter) internal {
-        attestationCenter = _attestationCenter;
+        attestationCenter = IAttestationCenter(_attestationCenter);
 
         emit AttestationCenterUpdated(_attestationCenter);
     }
 
     function _setFeePool(address _feePool) internal {
-        feePool = _feePool;
+        feePool = IFeePool(_feePool);
 
         emit FeePoolUpdated(_feePool);
     }
@@ -122,6 +120,8 @@ contract AttestationCenterProxy is
     }
 
     function _extractPolicyAddress(bytes calldata _data) internal pure returns (address) {
+        require(_data.length >= 20, "AttestationCenterProxy: Invalid policy address");
+
         return address(bytes20(_data));
     }
 

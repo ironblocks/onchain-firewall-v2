@@ -4,7 +4,7 @@
 
 pragma solidity ^0.8.25;
 
-import {VennFirewallConsumerBase} from "../../VennFirewallConsumerBase.sol";
+import {VennFirewallConsumerBase, Storage} from "../../VennFirewallConsumerBase.sol";
 
 import {IOwnable} from "../../../interfaces/IOwnable.sol";
 import {IProxyVennFirewallConsumer} from "../../../interfaces/consumers/proxy/IProxyVennFirewallConsumer.sol";
@@ -19,7 +19,7 @@ abstract contract ProxyVennFirewallConsumer is
     VennFirewallConsumerBase
 {
     modifier isAllowedInitializer(bytes32 _adminMemorySlot) {
-        address initializerAddress = _getAddressBySlot(_adminMemorySlot);
+        address initializerAddress = Storage.getAddressBySlot(_adminMemorySlot);
         address initializerOwner = IOwnable(initializerAddress).owner();
         require(
             msg.sender == initializerOwner,
@@ -38,10 +38,10 @@ abstract contract ProxyVennFirewallConsumer is
     function _initializeFirewallAdmin(address _firewallAdmin) internal {
         require(_firewallAdmin != address(0), "ProxyFirewallConsumerBase: Zero address.");
         require(
-            _getAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT) == address(0),
+            Storage.getAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT) == address(0),
             "ProxyFirewallConsumerBase: Admin already set."
         );
 
-        _setAddressBySlot(NEW_FIREWALL_ADMIN_STORAGE_SLOT, _firewallAdmin);
+        Storage.setAddressBySlot(NEW_FIREWALL_ADMIN_STORAGE_SLOT, _firewallAdmin);
     }
 }

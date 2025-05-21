@@ -16,8 +16,8 @@ import {IAttestationCenter} from "../dependencies/othentic/interfaces/IAttestati
 contract VennAvsLogic is AvsLogicBase, IVennAvsLogic {
     using ArrayHelpers for uint256[];
 
-    address public feePool;
-    address public protocolRegistry;
+    IFeePool public feePool;
+    IProtocolRegistry public protocolRegistry;
 
     constructor(
         address _attestationCenter,
@@ -37,22 +37,21 @@ contract VennAvsLogic is AvsLogicBase, IVennAvsLogic {
     ) external onlyAttestationCenter {
         address policyAddress = _extractPolicyAddress(_taskInfo.data);
 
-        uint16 taskDefinitionId = IProtocolRegistry(protocolRegistry).getProtocolTaskDefinitionId(
-            policyAddress
-        );
         require(
-            _taskInfo.taskDefinitionId == taskDefinitionId,
+            protocolRegistry.isSubnetSubscribed(policyAddress, _taskInfo.taskDefinitionId),
             "VennAvsLogic: Task definition id mismatch."
         );
 
-        uint256[] memory requiredOperatorIds = IProtocolRegistry(protocolRegistry)
-            .getRequiredOperatorIds(policyAddress);
+        uint256[] memory requiredOperatorIds = protocolRegistry.getRequiredOperatorIds(
+            policyAddress,
+            _taskInfo.taskDefinitionId
+        );
         if (requiredOperatorIds.length > 0) {
             uint256 missingOperatorId = requiredOperatorIds.verifyArraySubset(_attestersIds);
             require(missingOperatorId == 0, "VennAvsLogic: Missing operator id.");
         }
 
-        IFeePool(feePool).claimNativeFeeFromPolicy(policyAddress);
+        feePool.claimNativeFeeFromPolicy(policyAddress, _taskInfo.taskDefinitionId);
     }
 
     function afterTaskSubmission(
@@ -84,18 +83,20 @@ contract VennAvsLogic is AvsLogicBase, IVennAvsLogic {
     }
 
     function _setFeePool(address _feePool) internal {
-        feePool = _feePool;
+        feePool = IFeePool(_feePool);
 
         emit FeePoolUpdated(_feePool);
     }
 
     function _setProtocolRegistry(address _protocolRegistry) internal {
-        protocolRegistry = _protocolRegistry;
+        protocolRegistry = IProtocolRegistry(_protocolRegistry);
 
         emit ProtocolRegistryUpdated(_protocolRegistry);
     }
 
     function _extractPolicyAddress(bytes calldata _data) internal pure returns (address) {
+        require(_data.length >= 20, "VennAvsLogic: Invalid policy address");
+
         return address(bytes20(_data));
     }
 

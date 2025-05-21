@@ -1,0 +1,312 @@
+[
+  {
+    "type": "function",
+    "name": "deploy",
+    "inputs": [
+      {
+        "name": "_avsSettings",
+        "type": "tuple",
+        "internalType": "struct IL2AvsFactory.AvsSettings",
+        "components": [
+          {
+            "name": "avsName",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "avsGovernanceMultisigOwner",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "erc20Token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "isRewardsOnL2",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "l1ChainId",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct IL2AvsFactory.L2AvsContracts",
+        "components": [
+          {
+            "name": "obls",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "l2MessageHandler",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "attestationCenter",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "remoteMessageHandler",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "avsTreasury",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "internalTaskHandler",
+            "type": "address",
+            "internalType": "address"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "deploymentEnvironment",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "enum NetworkConfigLibrary.DeploymentEnvironment"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "initialize",
+    "inputs": [
+      {
+        "name": "_serviceDiscoveryL2",
+        "type": "address",
+        "internalType": "contract IServiceDiscovery"
+      },
+      {
+        "name": "_deploymentEnvironment",
+        "type": "uint8",
+        "internalType": "enum NetworkConfigLibrary.DeploymentEnvironment"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "isVerifiedAttestationCenterDeployment",
+    "inputs": [
+      {
+        "name": "_attestationCenterAddress",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "migrateContractStorage",
+    "inputs": [
+      {
+        "name": "_deploymentEnvironment",
+        "type": "uint8",
+        "internalType": "enum NetworkConfigLibrary.DeploymentEnvironment"
+      },
+      {
+        "name": "_verifiedAttestationCenters",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "AttestationCenterDeployed",
+    "inputs": [
+      {
+        "name": "attestationCenter",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AvsTreasuryDeployed",
+    "inputs": [
+      {
+        "name": "avsTreasury",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Initialized",
+    "inputs": [
+      {
+        "name": "version",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "InternalTaskHandlerDeployed",
+    "inputs": [
+      {
+        "name": "internalTaskHandler",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "L1MessageHandlerAddr",
+    "inputs": [
+      {
+        "name": "l1MessageHandler",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "L2MessageHandlerDeployed",
+    "inputs": [
+      {
+        "name": "l2MessageHandler",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OBLSDeployed",
+    "inputs": [
+      {
+        "name": "obls",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AddressZero",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Create2EmptyBytecode",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Create2FailedDeployment",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Create2InsufficientBalance",
+    "inputs": [
+      {
+        "name": "balance",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "needed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidDeploymentEnvironment",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidInitialization",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotInitializing",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Unauthorized",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UnknownDeploymentEnvironment",
+    "inputs": [
+      {
+        "name": "_deploymentEnvironment",
+        "type": "uint8",
+        "internalType": "enum NetworkConfigLibrary.DeploymentEnvironment"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "UnknownNetworkId",
+    "inputs": [
+      {
+        "name": "_nid",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  }
+]

@@ -19,7 +19,7 @@ interface IGnosisSafe {
         Operation operation
     ) external returns (bool success);
     function nonce() external view returns (uint);
-    function encodeTransactionData(
+    function getTransactionHash(
         address to,
         uint256 value,
         bytes calldata data,
@@ -30,10 +30,16 @@ interface IGnosisSafe {
         address gasToken,
         address refundReceiver,
         uint256 _nonce
-    ) external view returns (bytes memory);
+    ) external view returns (bytes32 txHash);
     function checkSignatures(
+        address executor,
         bytes32 dataHash,
-        bytes memory data,
         bytes memory signatures
     ) external view;
+    function checkSignatures(
+        bytes32 dataHash,
+        bytes calldata data,
+        bytes memory signatures
+    ) external view;
+    function domainSeparator() external view returns (bytes32);
 }

@@ -7,8 +7,10 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
-import {IFeePool} from "../interfaces/othentic/IFeePool.sol";
 import {IProtocolRegistry} from "../interfaces/IProtocolRegistry.sol";
+
+import {IFeePool} from "../interfaces/othentic/IFeePool.sol";
+import {IVennFeeCalculator} from "../interfaces/othentic/IVennFeeCalculator.sol";
 
 contract FeePool is IFeePool, AccessControlUpgradeable, UUPSUpgradeable {
     using Address for address payable;
@@ -17,12 +19,12 @@ contract FeePool is IFeePool, AccessControlUpgradeable, UUPSUpgradeable {
     bytes32 public constant FEE_CLAIMER_ROLE = keccak256("FEE_CLAIMER_ROLE");
     bytes32 public constant FEE_WITHDRAWER_ROLE = keccak256("FEE_WITHDRAWER_ROLE");
 
-    address public protocolRegistry;
+    IProtocolRegistry public protocolRegistry;
+    IVennFeeCalculator public vennFeeCalculator;
 
     uint256 public collectedNativeFees;
     uint256 public collectedRescuedFees;
 
-    mapping(address policy => uint256 fee) public policyFeeAmounts;
     mapping(address policy => uint256 balance) public policyBalance;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -30,10 +32,14 @@ contract FeePool is IFeePool, AccessControlUpgradeable, UUPSUpgradeable {
         _disableInitializers();
     }
 
-    function __FeePool_init(address _protocolRegistry) external initializer {
+    function __FeePool_init(
+        address _protocolRegistry,
+        address _vennFeeCalculator
+    ) external initializer {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         _setProtocolRegistry(_protocolRegistry);
+        _setVennFeeCalculator(_vennFeeCalculator);
     }
 
     function withdrawFees(
@@ -74,52 +80,62 @@ contract FeePool is IFeePool, AccessControlUpgradeable, UUPSUpgradeable {
         emit NativeFeesDeposited(_policy, msg.value);
     }
 
-    function claimNativeFeeFromPolicy(address _policy) external onlyRole(FEE_CLAIMER_ROLE) {
-        uint256 protocolFee = _getProtocolFee(_policy);
+    function claimNativeFeeFromPolicy(
+        address _policy,
+        uint16 _taskDefinitionId
+    ) external onlyRole(FEE_CLAIMER_ROLE) {
+        uint256 protocolFee = vennFeeCalculator.taskDefinitionIdTotalFees(_taskDefinitionId);
 
         require(policyBalance[_policy] >= protocolFee, "FeePool: Insufficient balance.");
 
         policyBalance[_policy] -= protocolFee;
         collectedNativeFees += protocolFee;
 
+        vennFeeCalculator.distributeFee(_taskDefinitionId);
+
         emit NativeFeeClaimed(_policy, protocolFee);
-    }
-
-    function setPolicyNativeFeeAmount(address _policy, uint256 _amount) external {
-        require(msg.sender == protocolRegistry, "FeePool: Only protocol registry.");
-
-        policyFeeAmounts[_policy] = _amount;
-
-        emit PolicyNativeFeeAmountSet(_policy, _amount);
     }
 
     function setProtocolRegistry(address _protocolRegistry) external onlyRole(ADMIN_ROLE) {
         _setProtocolRegistry(_protocolRegistry);
     }
 
-    function _setProtocolRegistry(address _protocolRegistry) internal {
-        protocolRegistry = _protocolRegistry;
-
-        emit ProtocolRegistrySet(_protocolRegistry);
+    function setVennFeeCalculator(address _vennFeeCalculator) external onlyRole(ADMIN_ROLE) {
+        _setVennFeeCalculator(_vennFeeCalculator);
     }
 
-    function getRequiredNativeAmountForPolicy(address _policy) public view returns (uint256) {
+    function getRequiredNativeAmountForPolicy(
+        address _policy,
+        uint16 _taskDefinitionId
+    ) public view returns (uint256) {
         uint256 policyCurrentBalance = policyBalance[_policy];
-        uint256 policyFeeAmount = _getProtocolFee(_policy);
+        uint256 policyFeeAmount = vennFeeCalculator.taskDefinitionIdTotalFees(_taskDefinitionId);
 
         return policyFeeAmount > policyCurrentBalance ? policyFeeAmount - policyCurrentBalance : 0;
     }
 
     function getTotalRequiredNativeAmountForPolicies(
-        address[] calldata _policies
+        address[] calldata _policies,
+        uint16[] calldata _taskDefinitionIds
     ) external view returns (uint256 totalRequiredAmount) {
         for (uint256 i = 0; i < _policies.length; i++) {
-            totalRequiredAmount += getRequiredNativeAmountForPolicy(_policies[i]);
+            totalRequiredAmount += getRequiredNativeAmountForPolicy(
+                _policies[i],
+                _taskDefinitionIds[i]
+            );
         }
     }
 
-    function _getProtocolFee(address _policy) internal view returns (uint256) {
-        return IProtocolRegistry(protocolRegistry).getProtocolFee(_policy);
+    function _setProtocolRegistry(address _protocolRegistry) internal {
+        protocolRegistry = IProtocolRegistry(_protocolRegistry);
+
+        emit ProtocolRegistrySet(_protocolRegistry);
+    }
+
+    function _setVennFeeCalculator(address _vennFeeCalculator) internal {
+        vennFeeCalculator = IVennFeeCalculator(_vennFeeCalculator);
+
+        emit VennFeeCalculatorSet(_vennFeeCalculator);
     }
 
     function _authorizeUpgrade(address) internal view override onlyRole(ADMIN_ROLE) {}

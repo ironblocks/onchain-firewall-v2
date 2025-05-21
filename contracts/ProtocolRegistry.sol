@@ -3,6 +3,7 @@
 // Copyright (c) Ironblocks 2025
 pragma solidity ^0.8.25;
 
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable, IAccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
@@ -17,32 +18,33 @@ import {IAttestationCenter} from "./dependencies/othentic/interfaces/IAttestatio
 
 contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUpgradeable {
     using ArrayHelpers for uint256[];
-
+    using EnumerableSet for EnumerableSet.UintSet;
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    bytes32 public constant POLICY_ADMIN_ROLE = keccak256("POLICY_ADMIN_ROLE");
 
     uint256 public constant MAX_VENN_DETECTION_FEE = 200_000;
     uint256 public constant MAX_VENN_PROTOCOL_FEE = 200_000;
 
-    address public vennFeeRecipient;
-    address public attestationCenter;
-    address public feePool;
+    IAttestationCenter public attestationCenter;
 
-    uint256 public taskDefinitionMaxFee;
+    address public vennFeeRecipient;
 
     uint256 public vennDetectionFee;
     uint256 public vennProtocolFee;
 
-    mapping(uint16 => uint256) public taskDefinitionIdFees;
-
-    mapping(address => Protocol) internal protocols;
-    mapping(address => ProtocolDetection) internal protocolDetections;
+    mapping(address policy => Protocol) internal protocols;
+    mapping(address policy => ProtocolDetection) internal protocolDetections;
+    mapping(address policy => mapping(uint16 taskDefinitionId => uint256[] operatorIds))
+        internal protocolTaskDefinitionOperatorIds;
+    mapping(address policy => EnumerableSet.UintSet taskDefinitionIds)
+        internal protocolTaskDefinitionIds;
 
     modifier onlyPolicyAdmin(address _policyAddress) {
-        require(
-            IAccessControlUpgradeable(_policyAddress).hasRole(POLICY_ADMIN_ROLE, msg.sender),
-            "ProtocolRegistry: Only policy admin."
-        );
+        _onlyPolicyAdmin(_policyAddress);
+        _;
+    }
+
+    modifier onlyExistsProtocol(address _policyAddress) {
+        _onlyExistsProtocol(_policyAddress);
         _;
     }
 
@@ -54,8 +56,6 @@ contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUp
     function __ProtocolRegistry_init(
         address _attestationCenter,
         address _vennFeeRecipient,
-        address _feePool,
-        uint256 _taskDefinitionMaxFee,
         uint256 _vennDetectionFee,
         uint256 _vennProtocolFee
     ) external initializer {
@@ -63,9 +63,7 @@ contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUp
 
         _setAttestationCenter(_attestationCenter);
         _setVennFeeRecipient(_vennFeeRecipient);
-        _setFeePool(_feePool);
 
-        _setTaskDefinitionMaxFee(_taskDefinitionMaxFee);
         _setVennDetectionFee(_vennDetectionFee);
         _setVennProtocolFee(_vennProtocolFee);
     }
@@ -75,15 +73,11 @@ contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUp
         address[] calldata _assets,
         address[] calldata _admins,
         string calldata _metadataURI
-    ) external {
-        uint256 operatorId = IAttestationCenter(attestationCenter).operatorsIdsByAddress(
-            _operator
-        );
+    ) external returns (address detectionEscrow) {
+        uint256 operatorId = attestationCenter.operatorsIdsByAddress(_operator);
         require(operatorId != 0, "ProtocolRegistry: Operator not found.");
 
-        address detectionEscrow = address(
-            new DetectionEscrow(address(this), msg.sender, _operator)
-        );
+        detectionEscrow = address(new DetectionEscrow(address(this), msg.sender, _operator));
 
         protocolDetections[detectionEscrow] = ProtocolDetection({
             protocolAdmin: msg.sender,
@@ -121,78 +115,72 @@ contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUp
         );
     }
 
-    function setTaskDefinitionFee(
-        uint16 _taskDefinitionId,
-        uint256 _fee
-    ) external onlyRole(ADMIN_ROLE) {
-        taskDefinitionIdFees[_taskDefinitionId] = _fee;
-
-        emit TaskDefinitionFeeSet(_taskDefinitionId, _fee);
-    }
-
     function registerProtocol(
         address _policyAddress,
-        uint256[] calldata _requiredOperatorIds,
-        uint16 _taskDefinitionId,
         string calldata _metadataURI
     ) external onlyPolicyAdmin(_policyAddress) {
         require(
             protocols[_policyAddress].policyAddress == address(0),
             "ProtocolRegistry: Protocol already registered."
         );
-        _verifyVetoOperators(_requiredOperatorIds, _taskDefinitionId);
 
         protocols[_policyAddress] = Protocol({
             policyAddress: _policyAddress,
-            requiredOperatorIds: _requiredOperatorIds,
-            taskDefinitionId: _taskDefinitionId,
             metadataURI: _metadataURI
         });
 
-        emit ProtocolRegistered(
-            _policyAddress,
-            _requiredOperatorIds,
-            _taskDefinitionId,
-            _metadataURI
-        );
+        emit ProtocolRegistered(_policyAddress, _metadataURI);
     }
 
     function updateProtocol(
         address _policyAddress,
-        uint256[] calldata _requiredOperatorIds,
-        uint16 _taskDefinitionId,
         string calldata _metadataURI
-    ) external onlyPolicyAdmin(_policyAddress) {
+    ) external onlyPolicyAdmin(_policyAddress) onlyExistsProtocol(_policyAddress) {
         Protocol storage protocol = protocols[_policyAddress];
 
-        require(
-            protocol.policyAddress != address(0),
-            "ProtocolRegistry: Protocol not registered."
-        );
-        _verifyVetoOperators(_requiredOperatorIds, _taskDefinitionId);
-
-        protocol.requiredOperatorIds = _requiredOperatorIds;
-        protocol.taskDefinitionId = _taskDefinitionId;
         protocol.metadataURI = _metadataURI;
 
-        emit ProtocolUpdated(
-            _policyAddress,
-            _requiredOperatorIds,
-            _taskDefinitionId,
-            _metadataURI
-        );
+        emit ProtocolUpdated(_policyAddress, _metadataURI);
     }
 
-    function setFeePool(address _feePool) external onlyRole(ADMIN_ROLE) {
-        _setFeePool(_feePool);
+    function subscribeSubnet(
+        address _policyAddress,
+        uint16 _taskDefinitionId,
+        uint256[] calldata _requiredOperatorIds
+    ) external onlyPolicyAdmin(_policyAddress) onlyExistsProtocol(_policyAddress) {
+        require(
+            _taskDefinitionId == 0 ||
+                _taskDefinitionId <= attestationCenter.numOfTaskDefinitions(),
+            "ProtocolRegistry: Invalid task definition id."
+        );
+
+        _verifyVetoOperators(_requiredOperatorIds, _taskDefinitionId);
+
+        protocolTaskDefinitionIds[_policyAddress].add(_taskDefinitionId);
+
+        protocolTaskDefinitionOperatorIds[_policyAddress][
+            _taskDefinitionId
+        ] = _requiredOperatorIds;
+
+        emit SubnetSubscribed(_policyAddress, _taskDefinitionId, _requiredOperatorIds);
+    }
+
+    function unsubscribeSubnet(
+        address _policyAddress,
+        uint16 _taskDefinitionId
+    ) external onlyPolicyAdmin(_policyAddress) onlyExistsProtocol(_policyAddress) {
+        require(
+            protocolTaskDefinitionIds[_policyAddress].remove(_taskDefinitionId),
+            "ProtocolRegistry: Subnet not subscribed."
+        );
+
+        delete protocolTaskDefinitionOperatorIds[_policyAddress][_taskDefinitionId];
+
+        emit SubnetUnsubscribed(_policyAddress, _taskDefinitionId);
     }
 
     function setAttestationCenter(address _attestationCenter) external onlyRole(ADMIN_ROLE) {
         _setAttestationCenter(_attestationCenter);
-    }
-
-    function setTaskDefinitionMaxFee(uint256 _taskDefinitionMaxFee) external onlyRole(ADMIN_ROLE) {
-        _setTaskDefinitionMaxFee(_taskDefinitionMaxFee);
     }
 
     function setVennDetectionFee(uint256 _vennDetectionFee) external onlyRole(ADMIN_ROLE) {
@@ -207,22 +195,10 @@ contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUp
         _setVennFeeRecipient(_vennFeeRecipient);
     }
 
-    function _setFeePool(address _feePool) internal {
-        feePool = _feePool;
-
-        emit FeePoolSet(_feePool);
-    }
-
     function _setAttestationCenter(address _attestationCenter) internal {
-        attestationCenter = _attestationCenter;
+        attestationCenter = IAttestationCenter(_attestationCenter);
 
         emit AttestationCenterSet(_attestationCenter);
-    }
-
-    function _setTaskDefinitionMaxFee(uint256 _taskDefinitionMaxFee) internal {
-        taskDefinitionMaxFee = _taskDefinitionMaxFee;
-
-        emit TaskDefinitionMaxFeeSet(_taskDefinitionMaxFee);
     }
 
     function _setVennDetectionFee(uint256 _vennDetectionFee) internal {
@@ -258,39 +234,40 @@ contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUp
         emit VennFeeRecipientSet(_vennFeeRecipient);
     }
 
-    function getProtocolTaskDefinitionId(address _policyAddress) external view returns (uint16) {
-        return protocols[_policyAddress].taskDefinitionId;
+    function getProtocolTaskDefinitionIds(
+        address _policyAddress
+    ) external view onlyExistsProtocol(_policyAddress) returns (uint256[] memory) {
+        return protocolTaskDefinitionIds[_policyAddress].values();
     }
 
-    function getProtocolFee(address _policyAddress) external view returns (uint256) {
-        Protocol storage protocol = protocols[_policyAddress];
-
-        require(
-            protocol.policyAddress != address(0),
-            "ProtocolRegistry: Protocol not registered."
-        );
-
-        return taskDefinitionIdFees[protocol.taskDefinitionId];
+    function isSubnetSubscribed(
+        address _policyAddress,
+        uint16 _taskDefinitionId
+    ) external view onlyExistsProtocol(_policyAddress) returns (bool) {
+        return protocolTaskDefinitionIds[_policyAddress].contains(_taskDefinitionId);
     }
 
     function getRequiredOperatorIds(
-        address _policyAddress
-    ) external view returns (uint256[] memory) {
-        return protocols[_policyAddress].requiredOperatorIds;
+        address _policyAddress,
+        uint16 _taskDefinitionId
+    ) external view onlyExistsProtocol(_policyAddress) returns (uint256[] memory) {
+        return protocolTaskDefinitionOperatorIds[_policyAddress][_taskDefinitionId];
     }
 
     function _verifyVetoOperators(
-        uint256[] memory _requiredOperatorIds,
+        uint256[] calldata _requiredOperatorIds,
         uint16 _taskDefinitionId
     ) internal view {
-        if (_requiredOperatorIds.length == 0) return;
+        if (_requiredOperatorIds.length == 0) {
+            return;
+        }
 
         require(
-            _requiredOperatorIds.isSorted(),
+            _requiredOperatorIds.isSortedAndUnique(),
             "ProtocolRegistry: Required operator ids must be sorted."
         );
 
-        IOBLS obls = IAttestationCenter(attestationCenter).obls();
+        IOBLS obls = attestationCenter.obls();
 
         for (uint256 i = 0; i < _requiredOperatorIds.length; i++) {
             require(
@@ -300,7 +277,7 @@ contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUp
         }
 
         if (_taskDefinitionId > 0) {
-            uint256[] memory subnetOperatorIds = IAttestationCenter(attestationCenter)
+            uint256[] memory subnetOperatorIds = attestationCenter
                 .getTaskDefinitionRestrictedOperators(_taskDefinitionId);
 
             uint256 missingOperatorId = _requiredOperatorIds.verifyArraySubset(subnetOperatorIds);
@@ -308,14 +285,28 @@ contract ProtocolRegistry is IProtocolRegistry, AccessControlUpgradeable, UUPSUp
         }
     }
 
-    function getProtocols(address _policyAddress) external view returns (Protocol memory) {
+    function getProtocol(address _policyAddress) external view returns (Protocol memory) {
         return protocols[_policyAddress];
     }
 
-    function getProtocolDetections(
+    function getProtocolDetection(
         address _detectionEscrow
     ) external view returns (ProtocolDetection memory) {
         return protocolDetections[_detectionEscrow];
+    }
+
+    function _onlyPolicyAdmin(address _policyAddress) internal view {
+        require(
+            IAccessControlUpgradeable(_policyAddress).hasRole(ADMIN_ROLE, msg.sender),
+            "ProtocolRegistry: Only policy admin."
+        );
+    }
+
+    function _onlyExistsProtocol(address _policyAddress) internal view {
+        require(
+            protocols[_policyAddress].policyAddress != address(0),
+            "ProtocolRegistry: Protocol not registered."
+        );
     }
 
     function _authorizeUpgrade(address) internal view override onlyRole(ADMIN_ROLE) {}

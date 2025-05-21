@@ -3,6 +3,8 @@
 // Copyright (c) Ironblocks 2025
 pragma solidity ^0.8.25;
 
+import {IProtocolRegistry} from "../IProtocolRegistry.sol";
+
 /**
  * @title IFeePool
  * @notice Interface for the FeePool contract.
@@ -13,6 +15,12 @@ interface IFeePool {
      * @param protocolRegistry The address of the protocol registry.
      */
     event ProtocolRegistrySet(address protocolRegistry);
+
+    /**
+     * @dev Emitted when the venn fee calculator is set.
+     * @param vennFeeCalculator The address of the venn fee calculator.
+     */
+    event VennFeeCalculatorSet(address vennFeeCalculator);
 
     /**
      * @dev Emitted when native fees are deposited for a policy.
@@ -83,15 +91,9 @@ interface IFeePool {
     /**
      * @dev Claim native fees from a policy.
      * @param _policy The address of the policy.
+     * @param _taskDefinitionId The ID of the task definition for the policy.
      */
-    function claimNativeFeeFromPolicy(address _policy) external;
-
-    /**
-     * @dev Set the native fee amount for a policy.
-     * @param _policy The address of the policy.
-     * @param _amount The amount of fees to set.
-     */
-    function setPolicyNativeFeeAmount(address _policy, uint256 _amount) external;
+    function claimNativeFeeFromPolicy(address _policy, uint16 _taskDefinitionId) external;
 
     /**
      * @dev Set the protocol registry.
@@ -100,19 +102,31 @@ interface IFeePool {
     function setProtocolRegistry(address _protocolRegistry) external;
 
     /**
+     * @dev Set the venn fee calculator.
+     * @param _vennFeeCalculator The address of the venn fee calculator.
+     */
+    function setVennFeeCalculator(address _vennFeeCalculator) external;
+
+    /**
      * @dev Get the required native amount for a policy.
      * @param _policy The address of the policy.
+     * @param _taskDefinitionId The ID of the task definition for the policy.
      * @return The required native amount.
      */
-    function getRequiredNativeAmountForPolicy(address _policy) external view returns (uint256);
+    function getRequiredNativeAmountForPolicy(
+        address _policy,
+        uint16 _taskDefinitionId
+    ) external view returns (uint256);
 
     /**
      * @dev Get the total required native amount for a list of policies.
      * @param _policies The list of policy addresses.
+     * @param _taskDefinitionIds The list of task definition IDs.
      * @return The total required native amount.
      */
     function getTotalRequiredNativeAmountForPolicies(
-        address[] calldata _policies
+        address[] calldata _policies,
+        uint16[] calldata _taskDefinitionIds
     ) external view returns (uint256);
 
     /**
@@ -137,7 +151,7 @@ interface IFeePool {
      * @dev Get the protocol registry address.
      * @return The address of the protocol registry.
      */
-    function protocolRegistry() external view returns (address);
+    function protocolRegistry() external view returns (IProtocolRegistry);
 
     /**
      * @dev Get the collected native fees.
@@ -150,13 +164,6 @@ interface IFeePool {
      * @return The collected rescued fees.
      */
     function collectedRescuedFees() external view returns (uint256);
-
-    /**
-     * @dev Get the policy fee amounts.
-     * @param _policy The address of the policy.
-     * @return The policy fee amount.
-     */
-    function policyFeeAmounts(address _policy) external view returns (uint256);
 
     /**
      * @dev Get the policy balance.

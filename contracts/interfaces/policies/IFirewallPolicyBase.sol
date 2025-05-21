@@ -44,12 +44,6 @@ interface IFirewallPolicyBase is IFirewallPolicy {
     function setExecutorStatus(address _caller, bool _status) external;
 
     /**
-     * @dev The policy admin role.
-     * @return The policy admin role.
-     */
-    function POLICY_ADMIN_ROLE() external view returns (bytes32);
-
-    /**
      * @dev The authorized executors.
      * @param _caller The address of the executor.
      * @return The authorized status of the executor.

@@ -10,7 +10,8 @@ import {FirewallPolicyBase} from "./FirewallPolicyBase.sol";
 import {Transient} from "../libs/Transient.sol";
 import {ApprovedCallsHelper} from "../libs/policies/ApprovedCallsHelper.sol";
 
-import {IApprovedCallsPolicy} from "../interfaces/policies/IApprovedCallsPolicy.sol";
+import {SupportsSafeFunctionCalls} from "./helpers/SupportsSafeFunctionCalls.sol";
+
 import {IDynamicTransientApprovedCallsPolicy} from "../interfaces/policies/IDynamicTransientApprovedCallsPolicy.sol";
 
 /**
@@ -32,9 +33,10 @@ import {IDynamicTransientApprovedCallsPolicy} from "../interfaces/policies/IDyna
  * and/or contact our support.
  */
 contract DynamicTransientApprovedCallsPolicy is
+    IDynamicTransientApprovedCallsPolicy,
     FirewallPolicyBase,
     AccessControl,
-    IDynamicTransientApprovedCallsPolicy
+    SupportsSafeFunctionCalls
 {
     using Transient for bytes32;
 
@@ -113,8 +115,7 @@ contract DynamicTransientApprovedCallsPolicy is
         address _txOrigin,
         uint256 _nonce
     ) external onlyRole(SIGNER_ROLE) {
-        _validateApprovedCalls(_expiration, _txOrigin, _nonce);
-        require(tx.origin == _txOrigin, "DynamicTransientApprovedCallsPolicy: Invalid txOrigin.");
+        _validateApprovedCalls(_advancedCalls, _expiration, _txOrigin, _nonce);
 
         _setAdvancedApprovedCalls(_advancedCalls);
         nonces[_txOrigin] = _nonce + 1;
@@ -129,7 +130,7 @@ contract DynamicTransientApprovedCallsPolicy is
         uint256 _nonce,
         bytes calldata _signature
     ) external {
-        _validateApprovedCalls(_expiration, _txOrigin, _nonce);
+        _validateApprovedCalls(_advancedCalls, _expiration, _txOrigin, _nonce);
         _validateSignature(_advancedCalls, _expiration, _txOrigin, _nonce, _signature);
 
         _setAdvancedApprovedCalls(_advancedCalls);
@@ -147,40 +148,15 @@ contract DynamicTransientApprovedCallsPolicy is
         emit SighashUintIndicesSet(_sigHash, _uintIndices);
     }
 
-    function setExecutorStatus(
-        address _caller,
-        bool _status
-    ) external onlyRole(POLICY_ADMIN_ROLE) {
+    function setExecutorStatus(address _caller, bool _status) external onlyRole(ADMIN_ROLE) {
         _setExecutorStatus(_caller, _status);
     }
 
     function setConsumersStatuses(
         address[] calldata _consumers,
         bool[] calldata _statuses
-    ) external onlyRole(POLICY_ADMIN_ROLE) {
+    ) external onlyRole(ADMIN_ROLE) {
         _setConsumersStatuses(_consumers, _statuses);
-    }
-
-    /**
-     * @dev See {IERC165-supportsInterface}.
-     */
-    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return
-            interfaceId == type(IApprovedCallsPolicy).interfaceId ||
-            super.supportsInterface(interfaceId);
-    }
-
-    function _popAdvancedApprovedCalls() internal returns (AdvancedApprovedCall memory) {
-        uint256 advancedCallsLength = _getAdvancedApprovedCallsLength();
-        require(advancedCallsLength > 0, "DynamicTransientApprovedCallsPolicy: Calls empty.");
-
-        AdvancedApprovedCall memory advancedCall = _getAdvancedApprovedCall(
-            advancedCallsLength - 1
-        );
-
-        bytes32(0).setValueBySlot(bytes32(advancedCallsLength - 1));
-
-        return advancedCall;
     }
 
     function _getAdvancedApprovedCallsLength() internal view returns (uint256) {
@@ -188,15 +164,18 @@ contract DynamicTransientApprovedCallsPolicy is
     }
 
     function _validateApprovedCalls(
+        AdvancedApprovedCall[] calldata _advancedCalls,
         uint256 _expiration,
         address _txOrigin,
         uint256 _nonce
     ) internal view {
+        require(_advancedCalls.length > 0, "DynamicTransientApprovedCallsPolicy: Calls empty.");
         require(
             _nonce == nonces[_txOrigin],
             "DynamicTransientApprovedCallsPolicy: Invalid nonce."
         );
         require(_expiration > block.timestamp, "DynamicTransientApprovedCallsPolicy: Expired.");
+        require(tx.origin == _txOrigin, "DynamicTransientApprovedCallsPolicy: Invalid txOrigin.");
     }
 
     function _validateSignature(
@@ -223,6 +202,18 @@ contract DynamicTransientApprovedCallsPolicy is
             hasRole(SIGNER_ROLE, signer),
             "DynamicTransientApprovedCallsPolicy: Invalid signer."
         );
+    }
+
+    function _popAdvancedApprovedCalls()
+        internal
+        returns (AdvancedApprovedCall memory advancedCall)
+    {
+        uint256 advancedCallsLength = _getAdvancedApprovedCallsLength();
+        require(advancedCallsLength > 0, "DynamicTransientApprovedCallsPolicy: Calls empty.");
+
+        advancedCall = _getAdvancedApprovedCall(advancedCallsLength - 1);
+
+        bytes32(0).setValueBySlot(bytes32(advancedCallsLength - 1));
     }
 
     function _setAdvancedApprovedCalls(AdvancedApprovedCall[] calldata _advancedCalls) internal {
@@ -272,10 +263,45 @@ contract DynamicTransientApprovedCallsPolicy is
         for (uint256 i = 0; i < maxValuesLength; i++) {
             bytes32 maxValuesSlot = bytes32(uint256(maxValuesStart) + i + 1);
             bytes32 minValuesSlot = bytes32(uint256(minValuesStart) + i + 1);
+
             maxValues[i] = uint256(maxValuesSlot.getValueBySlot());
             minValues[i] = uint256(minValuesSlot.getValueBySlot());
         }
         return
             AdvancedApprovedCall({callHash: callHash, maxValues: maxValues, minValues: minValues});
+    }
+
+    function getCurrentApprovedCalls()
+        external
+        view
+        returns (AdvancedApprovedCall[] memory advancedApprovedCalls)
+    {
+        uint256 length = uint256(bytes32(0).getValueBySlot());
+
+        advancedApprovedCalls = new AdvancedApprovedCall[](length);
+        for (uint256 i = 0; i < length; i++) {
+            advancedApprovedCalls[i] = _getAdvancedApprovedCall(i);
+        }
+    }
+
+    function getCallHash(
+        address _consumer,
+        address _sender,
+        address _origin,
+        bytes memory _data,
+        uint256 _value
+    ) external pure returns (bytes32) {
+        return ApprovedCallsHelper.getCallHash(_consumer, _sender, _origin, _data, _value);
+    }
+
+    /**
+     * @dev See {IERC165-supportsInterface}.
+     */
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(AccessControl, SupportsSafeFunctionCalls) returns (bool) {
+        return
+            SupportsSafeFunctionCalls.supportsInterface(interfaceId) ||
+            AccessControl.supportsInterface(interfaceId);
     }
 }

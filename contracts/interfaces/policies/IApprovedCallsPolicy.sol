@@ -20,6 +20,6 @@ interface IApprovedCallsPolicy {
         uint256 _expiration,
         address _txOrigin,
         uint256 _nonce,
-        bytes memory _signature
+        bytes calldata _signature
     ) external;
 }

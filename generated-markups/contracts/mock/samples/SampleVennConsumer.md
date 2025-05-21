@@ -1,0 +1,83 @@
+# SampleVennConsumer
+
+## Overview
+
+#### License: UNLICENSED
+
+```solidity
+contract SampleVennConsumer is VennFirewallConsumer, Ownable
+```
+
+
+## State variables info
+
+### deposits (0xfc7e286d)
+
+```solidity
+mapping(address => uint256) deposits
+```
+
+
+### tokenDeposits (0x3add0454)
+
+```solidity
+mapping(address => mapping(address => uint256)) tokenDeposits
+```
+
+
+## Functions info
+
+### constructor
+
+```solidity
+constructor(address _firewall) VennFirewallConsumer(_firewall, msg.sender)
+```
+
+
+### deposit (0xd0e30db0)
+
+```solidity
+function deposit() external payable firewallProtected
+```
+
+
+### withdraw (0x2e1a7d4d)
+
+```solidity
+function withdraw(uint256 _amount) external firewallProtected
+```
+
+
+### depositToken (0x338b5dea)
+
+```solidity
+function depositToken(
+    address _token,
+    uint256 _amount
+) external firewallProtected
+```
+
+
+### withdrawToken (0x9e281a98)
+
+```solidity
+function withdrawToken(
+    address _token,
+    uint256 _amount
+) external firewallProtected
+```
+
+
+### setOwner (0x13af4035)
+
+```solidity
+function setOwner(address _newOwner) external onlyOwner firewallProtected
+```
+
+
+### version (0x54fd4d50)
+
+```solidity
+function version() external pure returns (uint256)
+```
+

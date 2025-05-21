@@ -2,6 +2,8 @@ import "@nomicfoundation/hardhat-chai-matchers";
 import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-verify";
 import "@openzeppelin/hardhat-upgrades";
+import "@solarity/hardhat-markup";
+import "@solarity/hardhat-migrate";
 
 import "@typechain/hardhat";
 
@@ -11,8 +13,6 @@ import "hardhat-gas-reporter";
 import "solidity-coverage";
 
 import "tsconfig-paths/register";
-
-import "hardhat-tracer";
 
 import { HardhatUserConfig } from "hardhat/config";
 
@@ -27,48 +27,45 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       initialDate: "1970-01-01T00:00:00Z",
-      gas: "auto",
-      forking: {
-        url: "https://few-burned-road.ethereum-holesky.quiknode.pro/80134d1a1a41951a3093b4d4f60d6c0bd5451871",
-        blockNumber: 3008000,
-      },
-      chainId: 17000,
+      chainId: Number(process.env.FORKING_CHAIN_ID || 17000),
     },
     localhost: {
       url: "http://127.0.0.1:8545",
       initialDate: "1970-01-01T00:00:00Z",
-      gasMultiplier: 1.2,
+      gasMultiplier: 1.3,
       timeout: 1000000000000000,
     },
     polygonAmoy: {
       url: `https://polygon-amoy.blockpi.network/v1/rpc/public`,
       accounts: privateKey(),
-      gasMultiplier: 1.1,
+      gasMultiplier: 1.3,
     },
     ethereum: {
-      url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
+      url: process.env.MAINNET_RPC || `https://eth.merkle.io`,
       accounts: privateKey(),
-      gasMultiplier: 1.2,
+      gasMultiplier: 1.3,
+      chainId: 1,
     },
     holesky: {
-      url: `https://holesky.infura.io/v3/${process.env.INFURA_KEY}`,
+      url: process.env.HOLESKY_RPC || `https://ethereum-holesky-rpc.publicnode.com`,
       accounts: privateKey(),
-      gasMultiplier: 1.2,
+      gasMultiplier: 1.3,
+      chainId: 17000,
     },
     polygon: {
       url: `https://matic-mainnet.chainstacklabs.com`,
       accounts: privateKey(),
-      gasMultiplier: 1.2,
+      gasMultiplier: 1.3,
     },
     arbitrum: {
       url: `https://arbitrum-mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: privateKey(),
-      gasMultiplier: 1.2,
+      gasMultiplier: 1.3,
     },
     arbitrumSepolia: {
       url: `https://arbitrum-sepolia.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: privateKey(),
-      gasMultiplier: 1.1,
+      gasMultiplier: 1.3,
     },
   },
   solidity: {
@@ -89,6 +86,7 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: {
       mainnet: `${process.env.ETHERSCAN_KEY}`,
+      holesky: `${process.env.ETHERSCAN_KEY}`,
       polygonAmoy: `${process.env.POLYGONSCAN_KEY}`,
       polygon: `${process.env.POLYGONSCAN_KEY}`,
       arbitrumOne: `${process.env.ARBITRUM_KEY}`,
@@ -115,7 +113,14 @@ const config: HardhatUserConfig = {
     target: "ethers-v6",
     alwaysGenerateOverloads: true,
     discriminateTypes: true,
-    externalArtifacts: ["externalArtifacts/**/*.json"],
+    externalArtifacts: ["externalArtifacts/**/*.json", "externalArtifacts/**/*.abi"],
+  },
+  markup: {
+    outdir: "./generated-markups",
+    onlyFiles: [],
+    skipFiles: ["contracts/dependencies"],
+    noCompile: false,
+    verbose: false,
   },
 };
 

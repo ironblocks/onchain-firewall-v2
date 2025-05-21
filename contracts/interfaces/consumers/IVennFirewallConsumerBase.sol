@@ -45,6 +45,16 @@ interface IVennFirewallConsumerBase is IFirewallConsumer {
     error NotEnoughFee();
 
     /**
+     * @dev Error emitted when the user passes a non-zero user native fee when not enabled.
+     */
+    error NonZeroUserNativeFee();
+
+    /**
+     * @dev Error emitted when the attestation center proxy is not set.
+     */
+    error AttestationCenterProxyNotSet();
+
+    /**
      * @dev Error emitted when the proxy call fails.
      * @param returnData The bytes of the return data from the proxy call.
      */

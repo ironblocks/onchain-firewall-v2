@@ -11,8 +11,15 @@ import {Transient} from "../libs/Transient.sol";
 contract VennGuard is IGuard, AccessControl {
     using Transient for bytes32;
 
+    // keccak256(
+    //     "SafeTx(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)"
+    // );
+    bytes32 private constant SAFE_TX_TYPEHASH =
+        0xbb8310d486368db6bd6f849402fdd73ad53d316b5a4b2644ad6efe0f941286d8;
+
     uint256 public constant MAX_BYPASS_GUARD_WAIT_TIME = 7 days;
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     address public immutable attestationCenterProxy;
     address public immutable multisendContract;
@@ -21,7 +28,13 @@ contract VennGuard is IGuard, AccessControl {
     uint256 public nonce;
     uint256 public bypassGuardWaitTime;
 
+    bool public enabled = true;
+
     mapping(bytes32 safeTxHash => uint256 initTime) public bypassGuardInitTime;
+
+    event BypassGuard(bytes32 safeTxHash, uint256 initTime);
+    event TransactionBypassed(bytes32 safeTxHash);
+    event SetEnabled(bool enabled);
 
     constructor(
         address _attestationCenterProxy,
@@ -53,25 +66,25 @@ contract VennGuard is IGuard, AccessControl {
         bytes memory signatures
     ) external {
         uint256 gnosisSafeNonce = IGnosisSafe(safe).nonce();
-        bytes memory txHashData = IGnosisSafe(safe).encodeTransactionData(
-            // Transaction info
+        bytes memory encodedTransactionData = _encodeTransactionData(
             to,
             value,
             data,
             operation,
             safeTxGas,
-            // Payment info
             baseGas,
             gasPrice,
             gasToken,
             refundReceiver,
-            // Signature info
             gnosisSafeNonce
         );
-        bytes32 txHash = keccak256(txHashData);
+
+        bytes32 txHash = keccak256(encodedTransactionData);
         require(bypassGuardInitTime[txHash] == 0, "FirewallGuard: bypassGuard already called");
-        IGnosisSafe(safe).checkSignatures(txHash, txHashData, signatures);
+        IGnosisSafe(safe).checkSignatures(txHash, encodedTransactionData, signatures);
         bypassGuardInitTime[txHash] = block.timestamp;
+
+        emit BypassGuard(txHash, block.timestamp);
     }
 
     function checkTransaction(
@@ -87,12 +100,14 @@ contract VennGuard is IGuard, AccessControl {
         bytes memory,
         address
     ) external {
+        if (!enabled) return;
+
         require(msg.sender == safe, "VennGuard: only safe can call");
 
         bytes32 txHash;
         {
-            uint gnosisSafeNonce = IGnosisSafe(safe).nonce();
-            bytes memory txHashData = IGnosisSafe(safe).encodeTransactionData(
+            uint256 gnosisSafeNonce = IGnosisSafe(safe).nonce();
+            txHash = IGnosisSafe(safe).getTransactionHash(
                 // Transaction info
                 to,
                 value,
@@ -107,7 +122,6 @@ contract VennGuard is IGuard, AccessControl {
                 // Signature info
                 gnosisSafeNonce - 1 // We subtract 1 because the nonce is incremented before the transaction is executed
             );
-            txHash = keccak256(txHashData);
         }
 
         // If bypassGuard was called, allow the transaction to be executed if the wait time has passed
@@ -115,7 +129,10 @@ contract VennGuard is IGuard, AccessControl {
         if (
             bypassGuardInitTime[txHash] > 0 &&
             block.timestamp > bypassGuardInitTime[txHash] + bypassGuardWaitTime
-        ) return;
+        ) {
+            emit TransactionBypassed(txHash);
+            return;
+        }
 
         require(to == multisendContract, "VennGuard: Only multisend contract can be called.");
         (
@@ -130,18 +147,9 @@ contract VennGuard is IGuard, AccessControl {
         bytes32(0).setValueBySlot(metaTxHash);
     }
 
-    function approveMetaTxHash(
-        bytes32 metaTxHash,
-        uint256 _expiration,
-        uint256 _nonce
-    ) external onlyRole(SIGNER_ROLE) {
-        require(nonce == _nonce, "VennGuard: Invalid nonce.");
-        require(_expiration > block.timestamp, "VennGuard: Expired.");
-        nonce = _nonce + 1;
-        bytes32(uint256(1)).setValueBySlot(metaTxHash);
-    }
-
     function checkAfterExecution(bytes32 txHash, bool) external view {
+        if (!enabled) return;
+
         // If bypassGuard was called, allow the transaction to be executed if the wait time has passed
         // without checking firewall.
         if (
@@ -155,9 +163,31 @@ contract VennGuard is IGuard, AccessControl {
         require(approvedMetaTxHash == metaTxHash, "VennGuard: Invalid meta tx hash.");
     }
 
+    function approveMetaTxHash(
+        bytes32 metaTxHash,
+        uint256 _expiration,
+        uint256 _nonce
+    ) external onlyRole(SIGNER_ROLE) {
+        require(nonce == _nonce, "VennGuard: Invalid nonce.");
+        require(_expiration > block.timestamp, "VennGuard: Expired.");
+        nonce = _nonce + 1;
+        bytes32(uint256(1)).setValueBySlot(metaTxHash);
+    }
+
+    /**
+     * @dev We add a global bypass in case of misconfiguration, to prevent freezing safes. Once it
+     * can be confirmed that the safe and guard are configured correctly, the roles can be revoked
+     * @param _enabled The new enabled state of the guard.
+     */
+    function setEnabled(bool _enabled) external onlyRole(ADMIN_ROLE) {
+        enabled = _enabled;
+        emit SetEnabled(_enabled);
+    }
+
     function supportsInterface(
         bytes4 interfaceId
     ) public view virtual override(AccessControl, IERC165) returns (bool) {
+        require(msg.sender == safe, "VennGuard: only safe can call");
         return
             AccessControl.supportsInterface(interfaceId) ||
             interfaceId == type(IGuard).interfaceId || // 0xe6d7a83a
@@ -167,56 +197,43 @@ contract VennGuard is IGuard, AccessControl {
     function _parseMultisendCall(
         bytes memory data
     ) internal pure returns (address, uint256, bytes memory) {
-        // The first 4 bytes are the function selector for multiSend
-        // The next 32 bytes are the offset to the transactions data
-        // Then comes the length of the transactions data (32 bytes)
-        // After that, the actual transactions data starts
-
-        // Skip function selector (4 bytes) and offset (32 bytes)
-        uint256 startPos = 36;
-
-        // Read the length of the transactions data (next 32 bytes)
         uint256 transactionsLength;
-        assembly {
-            transactionsLength := mload(add(data, startPos))
-        }
-
-        // Move to the start of the actual transactions data
-        startPos += 32;
-
-        // Extract the first transaction details
-        // First byte is operation
-        uint8 operation;
-        assembly {
-            operation := shr(0xf8, mload(add(data, add(startPos, 0x20))))
-        }
-
-        // Next 20 bytes are the 'to' address
         address to;
-        assembly {
-            to := shr(0x60, mload(add(data, add(startPos, 0x21))))
-        }
-
-        // Next 32 bytes are the value
         uint256 value;
-        assembly {
-            value := mload(add(data, add(startPos, 0x35)))
-        }
-
-        // Next 32 bytes are the data length
         uint256 dataLength;
         assembly {
-            dataLength := mload(add(data, add(startPos, 0x55)))
+            // Memory layout of `bytes memory data` argument:
+            //
+            //  | length of data bytearray (32) | data... |
+            //
+            // data:
+            // | multiSend selector (4) | offset to transactions (32) | transactions length (32) | transactions... |
+            //
+            // transactions:
+            // | Txn1 | Txn2 | ... | TxnN |
+            //
+            // Txn:
+            // | operation (1) | to (20) | value (32) | calldata length (32) | calldata (length) |
+            let i := 0x20
+            i := add(i, 0x24)
+            transactionsLength := mload(add(data, i))
+            i := add(i, 0x20)
+            // data + i points to Txn1
+            to := shr(0x60, mload(add(data, add(i, 0x1)))) // operation (1)
+            value := mload(add(data, add(i, 0x15))) // operation (1) | to (0x14)
+            dataLength := mload(add(data, add(i, 0x35))) // operation (1) | to (0x14) | value (0x20)
         }
 
-        // Calculate the end index of the first transaction
-        // 1 byte (operation) + 20 bytes (to) + 32 bytes (value) + 32 bytes (dataLength) + dataLength
-        uint256 firstTxEndIndex = startPos + 0x20 + 0x55 + dataLength;
+        // selector (0x4) + offset (0x20) + transactions length (0x20) +
+        // operation (0x1) + to (0x14) + value (0x20) + txn1 calldata Length (0x20) +
+        // calldata (dataLength)
+        uint256 firstTxEndIndex = 0x4 + 0x20 + 0x20 + 0x1 + 0x14 + 0x20 + 0x20 + dataLength;
+        uint256 lastTxEndIndex = 0x4 + 0x20 + 0x20 + transactionsLength;
 
         // Extract the remaining transactions data (excluding the first transaction)
         bytes memory remainingData;
-        if (firstTxEndIndex < startPos + 0x20 + transactionsLength) {
-            uint256 remainingLength = startPos + 0x20 + transactionsLength - firstTxEndIndex;
+        if (firstTxEndIndex < lastTxEndIndex) {
+            uint256 remainingLength = lastTxEndIndex - firstTxEndIndex;
             remainingData = new bytes(remainingLength);
 
             for (uint256 i = 0; i < remainingLength; i++) {
@@ -228,5 +245,36 @@ contract VennGuard is IGuard, AccessControl {
         }
 
         return (to, value, remainingData);
+    }
+
+    function _encodeTransactionData(
+        address to,
+        uint256 value,
+        bytes memory data,
+        IGnosisSafe.Operation operation,
+        uint256 safeTxGas,
+        uint256 baseGas,
+        uint256 gasPrice,
+        address gasToken,
+        address refundReceiver,
+        uint256 _nonce
+    ) public view returns (bytes memory) {
+        bytes32 domainSeparator = IGnosisSafe(safe).domainSeparator();
+        bytes32 safeTxHash = keccak256(
+            abi.encode(
+                SAFE_TX_TYPEHASH,
+                to,
+                value,
+                keccak256(data),
+                operation,
+                safeTxGas,
+                baseGas,
+                gasPrice,
+                gasToken,
+                refundReceiver,
+                _nonce
+            )
+        );
+        return abi.encodePacked(bytes1(0x19), bytes1(0x01), domainSeparator, safeTxHash);
     }
 }

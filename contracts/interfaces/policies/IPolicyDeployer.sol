@@ -3,6 +3,7 @@
 // Copyright (c) Ironblocks 2025
 pragma solidity ^0.8.25;
 
+import {IFirewallModule} from "../gnosis-safe/IFirewallModule.sol";
 /**
  * @title IPolicyDeployer
  * @notice Interface for the PolicyDeployer contract.
@@ -71,5 +72,5 @@ interface IPolicyDeployer {
      * @dev Get the firewall module.
      * @return The firewall module.
      */
-    function firewallModule() external view returns (address);
+    function firewallModule() external view returns (IFirewallModule);
 }

@@ -9,7 +9,7 @@ import {IFirewall} from "../interfaces/IFirewall.sol";
 import {IFirewallModule} from "../interfaces/gnosis-safe/IFirewallModule.sol";
 
 contract FirewallModule is IFirewallModule {
-    bytes4 private constant APPROVE_SELECTOR = IFirewall.setPolicyStatus.selector;
+    bytes4 private constant SET_POLICY_STATUS_SELECTOR = IFirewall.setPolicyStatus.selector;
 
     address public gnosisSafe;
 
@@ -29,7 +29,7 @@ contract FirewallModule is IFirewallModule {
         require(approvedDeployers[msg.sender], "FirewallModule: Not approved deployer.");
         require(approvedFirewalls[_firewall], "FirewallModule: Not approved firewall.");
 
-        bytes memory data = abi.encodeWithSelector(APPROVE_SELECTOR, _policy, true);
+        bytes memory data = abi.encodeWithSelector(SET_POLICY_STATUS_SELECTOR, _policy, true);
         require(
             IGnosisSafe(gnosisSafe).execTransactionFromModule(
                 _firewall,

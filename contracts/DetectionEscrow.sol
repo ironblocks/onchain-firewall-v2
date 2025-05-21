@@ -13,7 +13,8 @@ import {FEE_SCALE} from "./helpers/Constants.sol";
 contract DetectionEscrow is IDetectionEscrow {
     using Address for address payable;
 
-    address public protocolRegistry;
+    IProtocolRegistry public protocolRegistry;
+
     address payable public operator;
     address payable public protocolAdmin;
 
@@ -30,7 +31,7 @@ contract DetectionEscrow is IDetectionEscrow {
     }
 
     constructor(address _protocolRegistry, address _protocolAdmin, address _operator) {
-        protocolRegistry = _protocolRegistry;
+        protocolRegistry = IProtocolRegistry(_protocolRegistry);
         protocolAdmin = payable(_protocolAdmin);
         operator = payable(_operator);
     }
@@ -38,10 +39,12 @@ contract DetectionEscrow is IDetectionEscrow {
     function approveClaimPayment(uint256 _amount) external onlyProtocolAdmin {
         require(pendingOperatorPayment == _amount, "DetectionEscrow: Amount mismatch.");
 
+        require(_amount > 0, "DetectionEscrow: No pending payment.");
+
         require(address(this).balance >= _amount, "DetectionEscrow: Insufficient balance.");
 
-        uint256 vennDetectionFee = IProtocolRegistry(protocolRegistry).vennDetectionFee();
-        address vennFeeRecipient = IProtocolRegistry(protocolRegistry).vennFeeRecipient();
+        uint256 vennDetectionFee = protocolRegistry.vennDetectionFee();
+        address vennFeeRecipient = protocolRegistry.vennFeeRecipient();
 
         uint256 vennDetectionFeeAmount = (_amount * vennDetectionFee) / FEE_SCALE;
         uint256 operatorPayment = _amount - vennDetectionFeeAmount;

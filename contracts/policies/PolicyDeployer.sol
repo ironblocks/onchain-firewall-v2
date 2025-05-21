@@ -12,7 +12,7 @@ import {ITransientApprovedCallsPolicyFactory} from "../interfaces/policies/ITran
 contract PolicyDeployer is IPolicyDeployer, AccessControl {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
-    address public firewallModule;
+    IFirewallModule public firewallModule;
 
     mapping(address factory => bool isApproved) public approvedFactories;
 
@@ -39,7 +39,7 @@ contract PolicyDeployer is IPolicyDeployer, AccessControl {
             address newPolicy = ITransientApprovedCallsPolicyFactory(factory).create(
                 _createData[i]
             );
-            IFirewallModule(firewallModule).approvePolicy(newPolicy, _firewall);
+            firewallModule.approvePolicy(newPolicy, _firewall);
 
             policies[i] = newPolicy;
 
@@ -65,7 +65,7 @@ contract PolicyDeployer is IPolicyDeployer, AccessControl {
     }
 
     function _setFirewallModule(address _firewallModule) internal {
-        firewallModule = _firewallModule;
+        firewallModule = IFirewallModule(_firewallModule);
 
         emit FirewallModuleSet(_firewallModule);
     }

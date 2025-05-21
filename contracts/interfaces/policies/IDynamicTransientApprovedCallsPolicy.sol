@@ -97,6 +97,32 @@ interface IDynamicTransientApprovedCallsPolicy is IFirewallPolicyBase {
     function setSighashUintIndices(bytes4 _sigHash, uint256[] calldata _uintIndices) external;
 
     /**
+     * @dev Returns the current approved calls.
+     * @return advancedApprovedCalls The current approved calls.
+     */
+    function getCurrentApprovedCalls()
+        external
+        view
+        returns (AdvancedApprovedCall[] memory advancedApprovedCalls);
+
+    /**
+     * @dev Returns the call hash for a given call.
+     * @param _consumer The consumer of the call.
+     * @param _sender The sender of the call.
+     * @param _origin The origin of the call.
+     * @param _data The data of the call.
+     * @param _value The value of the call.
+     * @return The call hash.
+     */
+    function getCallHash(
+        address _consumer,
+        address _sender,
+        address _origin,
+        bytes calldata _data,
+        uint256 _value
+    ) external view returns (bytes32);
+
+    /**
      * @dev The admin role.
      * @return The admin role.
      */

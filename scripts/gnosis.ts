@@ -84,7 +84,35 @@ async function safeSignTypedData(
   };
 }
 
-export async function execSafeTx(safe: GnosisSafe, tx: SafeTx, signers: SignerWithAddress[]) {
+export async function getSafeTxSignatures(safe: GnosisSafe, tx: SafeTx, signers: SignerWithAddress[] = []) {
+  if (!signers.length) {
+    const signersList = await safe.getOwners();
+    signers = await Promise.all(signersList.map((signer) => ethers.getSigner(signer)));
+  }
+
+  const safeTx = {
+    to: await ethers.resolveAddress(tx.to),
+    value: tx.value || 0,
+    data: tx.data || "0x",
+    operation: tx.operation || 0,
+    safeTxGas: tx.safeTxGas || 0,
+    baseGas: tx.baseGas || 0,
+    gasPrice: tx.gasPrice || 0,
+    gasToken: tx.gasToken || ethers.ZeroAddress,
+    refundReceiver: tx.refundReceiver || ethers.ZeroAddress,
+    nonce: tx.nonce || (await safe.nonce()),
+  };
+  const sigs = await Promise.all(signers.map((signer) => safeSignTypedData(signer, safe, safeTx)));
+  const signatureBytes = buildSignatureBytes(sigs);
+  return signatureBytes;
+}
+
+export async function execSafeTx(safe: GnosisSafe, tx: SafeTx, signers: SignerWithAddress[] = []) {
+  if (!signers.length) {
+    const signersList = await safe.getOwners();
+    signers = await Promise.all(signersList.map((signer) => ethers.getSigner(signer)));
+  }
+
   const safeTx = {
     to: await ethers.resolveAddress(tx.to),
     value: tx.value || 0,

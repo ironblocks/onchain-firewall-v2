@@ -6,6 +6,9 @@ pragma solidity ^0.8.25;
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 
+import {Storage} from "../libs/Storage.sol";
+import {Transient} from "../libs/Transient.sol";
+
 import {IFirewall} from "../interfaces/IFirewall.sol";
 import {IApprovedCallsPolicy} from "../interfaces/policies/IApprovedCallsPolicy.sol";
 import {IVennFirewallConsumerBase} from "../interfaces/consumers/IVennFirewallConsumerBase.sol";
@@ -38,29 +41,33 @@ abstract contract VennFirewallConsumerBase is IVennFirewallConsumerBase {
         bytes32(uint256(keccak256("eip1967.new.firewall.admin")) - 1);
 
     // This slot is used to store the attestation center proxy address
-    bytes32 internal constant ATTESTATION_CENTER_PROXY_SLOT =
+    bytes32 private constant ATTESTATION_CENTER_PROXY_SLOT =
         bytes32(uint256(keccak256("eip1967.attestation.center.proxy")) - 1);
 
+    // This slot is used to store the allow non zero user native fee flag
+    bytes32 private constant ALLOW_NON_ZERO_USERNATIVEFEE_FLAG_SLOT =
+        bytes32(uint256(keccak256("eip1967.allow.non.zero.usernativefee.flag")) - 1);
+
     // This slot is used to store the user paid fee
-    bytes32 internal constant USER_PAID_FEE_SLOT =
+    bytes32 private constant USER_PAID_FEE_SLOT =
         bytes32(uint256(keccak256("eip1967.user.paid.fee")) - 1);
 
     // This slot is used to store the safe function caller address
-    bytes32 internal constant SAFE_FUNCTION_CALLER_SLOT =
+    bytes32 private constant SAFE_FUNCTION_CALLER_SLOT =
         bytes32(uint256(keccak256("eip1967.safe.function.caller")) - 1);
 
     // This slot is used to store the safe function call flag
-    bytes32 internal constant SAFE_FUNCTION_CALL_FLAG_SLOT =
+    bytes32 private constant SAFE_FUNCTION_CALL_FLAG_SLOT =
         bytes32(uint256(keccak256("eip1967.safe.function.call.flag")) - 1);
 
     // This is the value for the safe function call flag when the function is not active
-    uint256 internal constant INACTIVE = 1;
+    uint256 private constant INACTIVE = 0;
 
     // This is the value for the safe function call flag when the function is active
-    uint256 internal constant ACTIVE = 2;
+    uint256 private constant ACTIVE = 1;
 
     // This is the value for the safe function call flag when the caller is not set
-    address internal constant CALLER_NOT_SET = address(1);
+    address private constant CALLER_NOT_SET = address(0);
 
     /**
      * @dev Modifier that will run the preExecution and postExecution hooks of the firewall, applying each of
@@ -71,7 +78,7 @@ abstract contract VennFirewallConsumerBase is IVennFirewallConsumerBase {
      * If you have any questions, please refer to the Firewall's documentation and/or contact our support.
      */
     modifier firewallProtected() {
-        address firewall = _getAddressBySlot(FIREWALL_STORAGE_SLOT);
+        address firewall = Storage.getAddressBySlot(FIREWALL_STORAGE_SLOT);
         if (firewall == address(0)) {
             _;
             return;
@@ -88,7 +95,7 @@ abstract contract VennFirewallConsumerBase is IVennFirewallConsumerBase {
      * @dev Modifier similar to onlyOwner, but for the firewall admin.
      */
     modifier onlyFirewallAdmin() {
-        if (msg.sender != _getAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT)) {
+        if (msg.sender != Storage.getAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT)) {
             revert NotFirewallAdmin();
         }
         _;
@@ -103,9 +110,20 @@ abstract contract VennFirewallConsumerBase is IVennFirewallConsumerBase {
             revert NotEnoughFee();
         }
 
+        if (
+            Storage.getValueBySlot(ALLOW_NON_ZERO_USERNATIVEFEE_FLAG_SLOT) == bytes32(0) &&
+            _userNativeFee > 0
+        ) {
+            revert NonZeroUserNativeFee();
+        }
+
         _initSafeFunctionCallFlags(_userNativeFee);
 
-        address attestationCenterProxy = _getAddressBySlot(ATTESTATION_CENTER_PROXY_SLOT);
+        address attestationCenterProxy = Storage.getAddressBySlot(ATTESTATION_CENTER_PROXY_SLOT);
+
+        if (attestationCenterProxy == address(0) && _userNativeFee > 0) {
+            revert AttestationCenterProxyNotSet();
+        }
 
         (bool success, bytes memory returnData) = attestationCenterProxy.call{
             value: _userNativeFee
@@ -114,6 +132,7 @@ abstract contract VennFirewallConsumerBase is IVennFirewallConsumerBase {
             revert ProxyCallFailed(returnData);
         }
 
+        // @dev if the callable function is non-payable, the value will be included in msg.value anyway
         Address.functionDelegateCall(address(this), _data);
 
         _deInitSafeFunctionCallFlags();
@@ -124,18 +143,18 @@ abstract contract VennFirewallConsumerBase is IVennFirewallConsumerBase {
      * @param _userNativeFee The user native fee.
      */
     function _initSafeFunctionCallFlags(uint256 _userNativeFee) internal {
-        _setAddressBySlot(SAFE_FUNCTION_CALLER_SLOT, msg.sender);
-        _setValueBySlot(SAFE_FUNCTION_CALL_FLAG_SLOT, ACTIVE);
-        _setValueBySlot(USER_PAID_FEE_SLOT, _userNativeFee);
+        Transient.setAddressBySlot(SAFE_FUNCTION_CALLER_SLOT, msg.sender);
+        Transient.setValueBySlot(SAFE_FUNCTION_CALL_FLAG_SLOT, ACTIVE);
+        Transient.setValueBySlot(USER_PAID_FEE_SLOT, _userNativeFee);
     }
 
     /**
      * @dev Internal function to deinitialize the safe function call flags.
      */
     function _deInitSafeFunctionCallFlags() internal {
-        _setAddressBySlot(SAFE_FUNCTION_CALLER_SLOT, CALLER_NOT_SET);
-        _setValueBySlot(SAFE_FUNCTION_CALL_FLAG_SLOT, INACTIVE);
-        _setValueBySlot(USER_PAID_FEE_SLOT, 0);
+        Transient.setAddressBySlot(SAFE_FUNCTION_CALLER_SLOT, CALLER_NOT_SET);
+        Transient.setValueBySlot(SAFE_FUNCTION_CALL_FLAG_SLOT, INACTIVE);
+        Transient.setUint256BySlot(USER_PAID_FEE_SLOT, 0);
     }
 
     function setAttestationCenterProxy(
@@ -149,33 +168,43 @@ abstract contract VennFirewallConsumerBase is IVennFirewallConsumerBase {
             );
         }
 
-        _setAddressBySlot(ATTESTATION_CENTER_PROXY_SLOT, _attestationCenterProxy);
+        Storage.setAddressBySlot(ATTESTATION_CENTER_PROXY_SLOT, _attestationCenterProxy);
 
         emit AttestationCenterProxyUpdated(_attestationCenterProxy);
     }
 
+    function setAllowNonZeroUserNativeFee(
+        bool _allowNonZeroUserNativeFee
+    ) external onlyFirewallAdmin {
+        Storage.setValueBySlot(
+            ALLOW_NON_ZERO_USERNATIVEFEE_FLAG_SLOT,
+            _allowNonZeroUserNativeFee ? bytes32(uint256(1)) : bytes32(0)
+        );
+    }
+
     function firewallAdmin() external view returns (address) {
-        return _getAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT);
+        return Storage.getAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT);
     }
 
     function setFirewall(address _firewall) external onlyFirewallAdmin {
-        _setAddressBySlot(FIREWALL_STORAGE_SLOT, _firewall);
+        Storage.setAddressBySlot(FIREWALL_STORAGE_SLOT, _firewall);
 
         emit FirewallUpdated(_firewall);
     }
 
     function setFirewallAdmin(address _firewallAdmin) external onlyFirewallAdmin {
-        _setAddressBySlot(NEW_FIREWALL_ADMIN_STORAGE_SLOT, _firewallAdmin);
+        Storage.setAddressBySlot(NEW_FIREWALL_ADMIN_STORAGE_SLOT, _firewallAdmin);
 
         emit FirewallAdminProposed(_firewallAdmin);
     }
 
     function acceptFirewallAdmin() external {
-        if (msg.sender != _getAddressBySlot(NEW_FIREWALL_ADMIN_STORAGE_SLOT)) {
+        if (msg.sender != Storage.getAddressBySlot(NEW_FIREWALL_ADMIN_STORAGE_SLOT)) {
             revert NotNewFirewallAdmin();
         }
 
-        _setAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT, msg.sender);
+        Storage.setAddressBySlot(FIREWALL_ADMIN_STORAGE_SLOT, msg.sender);
+        Storage.setAddressBySlot(NEW_FIREWALL_ADMIN_STORAGE_SLOT, address(0));
 
         emit FirewallAdminUpdated(msg.sender);
     }
@@ -190,56 +219,12 @@ abstract contract VennFirewallConsumerBase is IVennFirewallConsumerBase {
             value := callvalue()
         }
 
-        if (_getValueBySlot(SAFE_FUNCTION_CALL_FLAG_SLOT) == ACTIVE) {
-            if (msg.sender == _getAddressBySlot(SAFE_FUNCTION_CALLER_SLOT)) {
-                uint256 fee = _getValueBySlot(USER_PAID_FEE_SLOT);
+        if (Transient.getUint256BySlot(SAFE_FUNCTION_CALL_FLAG_SLOT) == ACTIVE) {
+            if (msg.sender == Transient.getAddressBySlot(SAFE_FUNCTION_CALLER_SLOT)) {
+                uint256 fee = Transient.getUint256BySlot(USER_PAID_FEE_SLOT);
 
                 value = value - fee;
             }
-        }
-    }
-
-    /**
-     * @dev Internal helper function to set an address in a storage slot.
-     * @param _slot The storage slot.
-     * @param _address The address to be set.
-     */
-    function _setAddressBySlot(bytes32 _slot, address _address) internal {
-        assembly {
-            sstore(_slot, _address)
-        }
-    }
-
-    /**
-     * @dev Internal helper function to get an address from a storage slot.
-     * @param _slot The storage slot.
-     * @return _address The address from the storage slot.
-     */
-    function _getAddressBySlot(bytes32 _slot) internal view returns (address _address) {
-        assembly {
-            _address := sload(_slot)
-        }
-    }
-
-    /**
-     * @dev Internal helper function to set a value in a storage slot.
-     * @param _slot The storage slot.
-     * @param _value The value to be set.
-     */
-    function _setValueBySlot(bytes32 _slot, uint256 _value) internal {
-        assembly {
-            sstore(_slot, _value)
-        }
-    }
-
-    /**
-     * @dev Internal helper function to get a value from a storage slot.
-     * @param _slot The storage slot.
-     * @return _value The value from the storage slot.
-     */
-    function _getValueBySlot(bytes32 _slot) internal view returns (uint256 _value) {
-        assembly {
-            _value := sload(_slot)
         }
     }
 }

@@ -3,7 +3,10 @@
 // Copyright (c) Ironblocks 2025
 pragma solidity ^0.8.25;
 
+import {IFeePool} from "./IFeePool.sol";
 import {IAvsLogicBase} from "./IAvsLogicBase.sol";
+
+import {IProtocolRegistry} from "../IProtocolRegistry.sol";
 
 /**
  * @title IVennAvsLogic
@@ -38,11 +41,11 @@ interface IVennAvsLogic is IAvsLogicBase {
      * @dev Get the fee pool address
      * @return The fee pool address.
      */
-    function feePool() external view returns (address);
+    function feePool() external view returns (IFeePool);
 
     /**
      * @dev Get the protocol registry address
      * @return The protocol registry address.
      */
-    function protocolRegistry() external view returns (address);
+    function protocolRegistry() external view returns (IProtocolRegistry);
 }
